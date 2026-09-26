@@ -1,20 +1,47 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
-//
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
-//
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
 
-export {}
+export const usersTable = pgTable("users", {
+  id: serial("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull().unique(),
+  email: text("email").notNull(),
+  name: text("name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const coursesTable = pgTable("courses", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  price: integer("price").notNull(), // in paise/cents
+  thumbnail: text("thumbnail").notNull(), // S3 URL
+  category: text("category").notNull(), // JEE, NEET, Foundation, etc.
+  vimeoId: text("vimeo_id"), // Protected video
+  pdfUrl: text("pdf_url"), // Protected notes
+});
+
+export const couponsTable = pgTable("coupons", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  discountPercent: integer("discount_percent").notNull(),
+  isPublic: boolean("is_public").default(false).notNull(),
+});
+
+export const userCoursesTable = pgTable("user_courses", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id).notNull(),
+  courseId: integer("course_id").references(() => coursesTable.id).notNull(),
+  razorpayOrderId: text("razorpay_order_id"),
+  razorpayPaymentId: text("razorpay_payment_id"),
+  purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
+});
+
+// Zod Schemas
+export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof usersTable.$inferSelect;
+
+export const insertCourseSchema = createInsertSchema(coursesTable).omit({ id: true });
+export type InsertCourse = z.infer<typeof insertCourseSchema>;
+export type Course = typeof coursesTable.$inferSelect;
