@@ -1,47 +1,29 @@
-import { Feather } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
+
+const EDURAIN_LOGO = require('@/assets/images/edurain-logo.jpg');
 
 export function AppIcon({ small = false }: { small?: boolean }) {
   const colors = useColors();
   return (
-    <View style={[styles.mark, small && styles.smallMark, { backgroundColor: colors.coral }]}>
-      <Feather name="book-open" size={small ? 16 : 22} color={colors.primaryForeground} />
-      <View style={[styles.spark, { backgroundColor: colors.gold }]} />
+    <View style={[styles.logoFrame, small && styles.smallLogoFrame, { backgroundColor: colors.card }]}>
+      <Image source={EDURAIN_LOGO} style={styles.logoImage} resizeMode="contain" accessibilityLabel="EDURAIN logo" />
     </View>
   );
 }
 
-export function Wordmark({ light = false }: { light?: boolean }) {
-  const colors = useColors();
-  return (
-    <View style={styles.wordmark}>
-      <AppIcon small />
-      <Text style={[styles.word, { color: light ? colors.primaryForeground : colors.navy }]}>
-        EDU<Text style={{ color: colors.coral }}>RAIN</Text>
-      </Text>
-    </View>
-  );
+export function Wordmark() {
+  return <Image source={EDURAIN_LOGO} style={styles.wordmarkLogo} resizeMode="contain" accessibilityLabel="EDURAIN logo" />;
 }
 
 const styles = StyleSheet.create({
-  mark: {
+  logoFrame: {
     width: 48,
     height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+    borderRadius: 15,
+    overflow: 'hidden',
   },
-  smallMark: { width: 30, height: 30, borderRadius: 10 },
-  spark: {
-    width: 7,
-    height: 7,
-    borderRadius: 3,
-    position: 'absolute',
-    top: 7,
-    right: 8,
-  },
-  wordmark: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  word: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.5 },
+  smallLogoFrame: { width: 38, height: 38, borderRadius: 12 },
+  logoImage: { width: '100%', height: '100%' },
+  wordmarkLogo: { width: 52, height: 52, borderRadius: 14 },
 });
