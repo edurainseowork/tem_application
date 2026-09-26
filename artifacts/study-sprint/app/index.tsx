@@ -28,7 +28,7 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isReady && user) router.replace('/(tabs)');
+    if (isReady && user) router.replace('/home');
   }, [isReady, user]);
 
   const handleContinue = async () => {
@@ -41,7 +41,7 @@ export default function LoginScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await login(name, email);
     setIsSubmitting(false);
-    router.replace('/(tabs)');
+    router.replace('/home');
   };
 
   if (!isReady) {

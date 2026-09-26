@@ -14,7 +14,7 @@ import { useColors } from '@/hooks/useColors';
 function NativeTabLayout() {
   return (
     <NativeTabs>
-      <NativeTabs.Trigger name="index">
+      <NativeTabs.Trigger name="home">
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} />
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
@@ -62,7 +62,7 @@ function ClassicTabLayout() {
           ) : <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]} />,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color }) => <Feather name="home" size={21} color={color} /> }} />
+      <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: ({ color }) => <Feather name="home" size={21} color={color} /> }} />
       <Tabs.Screen name="explore" options={{ title: 'Explore', tabBarIcon: ({ color }) => <Feather name="book-open" size={21} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <Feather name="user" size={21} color={color} /> }} />
     </Tabs>
