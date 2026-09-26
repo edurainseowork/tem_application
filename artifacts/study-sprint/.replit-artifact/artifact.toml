@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "StudySprint"
+description = "A mobile learning app for students to browse JEE, NEET, Foundation, and other courses, unlock content, attend live classes, watch recorded lessons, read notes, and take weekly quizzes."
+version = "1.0.0"
+id = "artifacts/study-sprint"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 21654
+
+[services.development]
+run = "pnpm --filter @workspace/study-sprint run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/study-sprint", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/study-sprint", "run", "serve" ]
+
+[services.env]
+PORT = "21654"
+BASE_PATH = "/"

@@ -1,10 +1,12 @@
-# [Project name]
+# StudySprint
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+StudySprint is a mobile learning app where students discover courses, unlock lessons, attend live classes, review recordings, read notes, and take weekly quizzes.
 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/study-sprint run dev` — run the Expo mobile preview
+- `pnpm --filter @workspace/study-sprint run typecheck` — typecheck the mobile app
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
@@ -22,23 +24,34 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/study-sprint/app/` — Expo Router screens for authentication, dashboard, course detail, profile, and quizzes
+- `artifacts/study-sprint/constants/data.ts` — local MVP course catalog and learning content fixtures
+- `artifacts/study-sprint/context/AppContext.tsx` — persisted login and purchased-course state
+- `artifacts/study-sprint/constants/colors.ts` — StudySprint theme tokens
+- `artifacts/study-sprint/assets/images/` — generated app icon and course artwork
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first mobile build is frontend-first and uses AsyncStorage so the core student journey works without waiting on external service credentials.
+- Course unlocks are represented locally, while notes, live sessions, and recordings open the native browser/WebView-compatible external destinations.
+- Expo Router groups the primary experience into Home, Explore, and Profile tabs, with stack screens for course details and quizzes.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Email-based onboarding with persisted student identity.
+- Dashboard with JEE, NEET, Foundation, and All Courses discovery paths.
+- Searchable course catalog and course detail pages with public/private coupon entry.
+- Local purchase/unlock state that reveals notes, live classes, recordings, and weekly quizzes.
+- Profile page with learning stats, active courses, and logout.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+No additional preferences recorded.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- External auth, Razorpay, AWS content APIs, Vimeo privacy, and live-class provider links are intentionally deferred from the first frontend MVP.
+- Keep the mobile workflow running through the configured Expo workflow; do not launch Expo directly from the shell.
 
 ## Pointers
 

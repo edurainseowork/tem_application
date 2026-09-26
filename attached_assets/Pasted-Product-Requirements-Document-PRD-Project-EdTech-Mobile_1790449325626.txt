@@ -1,0 +1,114 @@
+Product Requirements Document (PRD)
+Project: EdTech Mobile Application (7-Day MVP)
+Target Audience: Up to 1,000 active students (Initial 45-day deployment)
+Platform: Mobile Application (iOS & Android)
+
+(Note: To save this document as a PDF, press Ctrl+P or Cmd+P on your device and select "Save as PDF" from the print menu.)
+
+1. Executive Summary
+The objective is to develop and launch a Minimum Viable Product (MVP) for an EdTech platform within a strict 7-day timeline. The application will allow students to browse courses across four primary categories, purchase access using coupons and a payment gateway, and consume educational content (live classes, recorded videos, PDF notes, and weekly tests) within the app.
+
+2. Technical Stack & Architecture (Hybrid Approach)
+Frontend Framework: React Native (using Expo for rapid development).
+
+Authentication: Firebase Authentication (Phone/OTP or Email/Password).
+
+Backend & Database: AWS (API Gateway + AWS Lambda + DynamoDB or RDS).
+
+Asset Storage (PDFs/Images): AWS S3.
+
+Video Hosting & Streaming: Vimeo (for recorded lectures).
+
+Live Classes: Vimeo Live / Zoom Links / YouTube Live (Embedded via Iframe/WebView).
+
+Payment Gateway: Razorpay SDK.
+
+3. User Journey Flow
+Authentication: User opens the app and logs in securely via Firebase.
+
+Dashboard: User lands on the Home Screen featuring 4 primary category tiles.
+
+Browsing: User taps a category to view a list of available courses.
+
+Pre-Purchase Review: User taps a course to view details, descriptions, and pricing.
+
+Checkout: User applies a public or private coupon code and completes the purchase via Razorpay.
+
+Content Consumption: Upon successful payment, the locked content tabs (Classes, Notes, Tests) become accessible instantly.
+
+4. Frontend Screen Requirements
+4.1. Screen 1: Authentication (Login/Signup)
+Clean, minimalist user interface.
+
+Input fields for Phone Number & OTP (or Email & Password) powered by Firebase Auth.
+
+Automatic redirection to the Home Screen upon successful authentication.
+
+4.2. Screen 2: Home Screen (Dashboard)
+Header displaying a personalized welcome message (e.g., "Hello, [User Name]").
+
+Category Grid (4 Primary Tiles):
+
+JEE
+
+NEET
+
+Foundation
+
+All Courses
+
+Action: Tapping any tile routes the user to the Course Listing Screen filtered by that specific category.
+
+4.3. Screen 3: Course Listing Screen
+Displays a vertically scrollable list of courses belonging to the selected category.
+
+Course Card UI: Must include a thumbnail image (fetched from AWS S3), course title, and price.
+
+4.4. Screen 4: Course Details Screen (The Core Hub)
+This screen features conditional rendering based on the user's purchase status (is_purchased boolean).
+
+State A: Locked (Pre-Purchase)
+
+About Section: Comprehensive course description, instructor details, and validity period.
+
+Coupon Section:
+
+Public Coupons: Visible, selectable offers displayed on the screen (e.g., "FESTIVE20 for 20% Off").
+
+Private Coupons: A text input field allowing users to manually type and apply hidden/exclusive coupon codes.
+
+Checkout: A prominent 'Buy Now' button that initializes the Razorpay payment sheet.
+
+Constraint: Educational content tabs must remain hidden or explicitly show a "Locked" padlock icon.
+
+State B: Unlocked (Post-Purchase)
+
+The Coupon section and 'Buy Now' button are removed.
+
+Top-tab or bottom-tab navigation appears, granting access to the following sections:
+
+Content (Notes): A list of chapter-wise PDF documents. Tapping an item opens the PDF directly from AWS S3 using the device browser or an in-app Webview.
+
+Live Classes: A schedule of upcoming live sessions featuring a 'Join Now' button (linking to Zoom/YouTube Live).
+
+Recorded Lectures: A list of past classes. Videos must render directly inside the app using a Vimeo Iframe/Webview component.
+
+Tests (Weekly Quiz): A list of available assessments. Tapping a test opens a lightweight, text-based Multiple Choice Question (MCQ) interface.
+
+5. Backend & API Requirements (AWS)
+The AWS backend must expose the following RESTful API endpoints:
+
+User Profile API (/users): Creates or fetches the user's profile upon Firebase login, storing their details and an array of purchased_courses.
+
+Course API (/courses): Retrieves the catalog of courses, including metadata (titles, descriptions, pricing, thumbnails).
+
+Coupon API (/coupons): Validates the applied coupon code against the database and returns the newly discounted price to the frontend.
+
+Payment Webhook (/webhook/razorpay): A secure endpoint that listens for successful payment events from Razorpay and updates the user's purchased_courses array in the database.
+
+Secure Content API (/content): Validates the user's purchase status before returning sensitive Vimeo video IDs, S3 PDF URLs, and test data.
+
+6. Security & Development Constraints
+Video Protection: Configure Vimeo domain-level privacy settings to "Hide from Vimeo" and "Embed only on specific domains". This prevents videos from playing if links are leaked outside the app ecosystem.
+
+Development Speed: To meet the 7-day deadline, developers must strictly avoid building custom video players or complex PDF viewer engines. Rely entirely on native WebViews, Vimeo's default Iframe, and basic text/radio-button UI for quizzes.
