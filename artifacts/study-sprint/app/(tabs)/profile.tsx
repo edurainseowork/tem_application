@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Wordmark } from '@/components/AppIcon';
 import { COURSES } from '@/constants/data';
@@ -15,11 +15,9 @@ export default function ProfileScreen() {
   const name = user?.name || 'Student';
   const initials = name.split(' ').map((item) => item[0]).join('').slice(0, 2).toUpperCase();
 
-  const handleLogout = () => {
-    Alert.alert('Log out?', 'Your course progress stays saved on this device.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log out', style: 'destructive', onPress: async () => { await logout(); router.replace('/'); } },
-    ]);
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/');
   };
 
   return (
@@ -43,7 +41,7 @@ export default function ProfileScreen() {
       }) : (
         <Pressable onPress={() => router.push('/(tabs)/explore')} style={[styles.emptyLearning, { backgroundColor: colors.accent }]}><Feather name="book-open" size={20} color={colors.coral} /><Text style={[styles.emptyTitle, { color: colors.navy }]}>Your learning shelf is empty</Text><Text style={[styles.emptyText, { color: colors.inkSubtle }]}>Explore a course and start building your streak.</Text><Text style={[styles.linkText, { color: colors.coral }]}>Browse courses <Feather name="arrow-right" size={13} color={colors.coral} /></Text></Pressable>
       )}
-      <Pressable onPress={handleLogout} style={[styles.logout, { borderColor: colors.border }]}><Feather name="log-out" size={17} color={colors.destructive} /><Text style={[styles.logoutText, { color: colors.destructive }]}>Log out</Text></Pressable>
+      <Pressable testID="logout-button" onPress={handleLogout} style={({ pressed }) => [styles.logout, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="log-out" size={17} color={colors.destructive} /><Text style={[styles.logoutText, { color: colors.destructive }]}>Log out</Text></Pressable>
     </ScrollView>
   );
 }

@@ -18,7 +18,7 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 92 }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 34, paddingBottom: insets.bottom + 92 }]}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
