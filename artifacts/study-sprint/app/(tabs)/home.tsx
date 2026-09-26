@@ -4,16 +4,36 @@ import React from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppIcon } from '@/components/AppIcon';
-import { CATEGORIES, COURSES } from '@/constants/data';
+import { CATEGORIES } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
+import { fetchCourses, Course } from '@/api/client';
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, purchasedCourses } = useApp();
-  const firstName = user?.name.split(' ')[0] || 'Learner';
-  const featured = COURSES[0];
+  const firstName = user?.name?.split(' ')[0] || 'Learner';
+  
+  const [courses, setCourses] = React.useState<Course[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetchCourses().then((data) => {
+      setCourses(data);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: colors.navy }}>Loading courses...</Text>
+      </View>
+    );
+  }
+
+  const featured = courses[0];
 
   return (
     <ScrollView
@@ -31,20 +51,22 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <View style={[styles.heroCard, { backgroundColor: colors.navy }]}>
-        <View style={styles.heroCopy}>
-          <Text style={[styles.heroKicker, { color: colors.gold }]}>KEEP THE STREAK ALIVE</Text>
-          <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>One focused session at a time.</Text>
-          <Text style={[styles.heroText, { color: '#bdc8df' }]}>You are closer than you think.</Text>
-          <Pressable style={[styles.heroButton, { backgroundColor: colors.coral }]} onPress={() => router.push(`/course/${featured.id}`)}>
-            <Text style={[styles.heroButtonText, { color: colors.primaryForeground }]}>Resume learning</Text>
-            <Feather name="arrow-up-right" size={16} color={colors.primaryForeground} />
-          </Pressable>
+      {featured ? (
+        <View style={[styles.heroCard, { backgroundColor: colors.navy }]}>
+          <View style={styles.heroCopy}>
+            <Text style={[styles.heroKicker, { color: colors.gold }]}>KEEP THE STREAK ALIVE</Text>
+            <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>One focused session at a time.</Text>
+            <Text style={[styles.heroText, { color: '#bdc8df' }]}>You are closer than you think.</Text>
+            <Pressable style={[styles.heroButton, { backgroundColor: colors.coral }]} onPress={() => router.push(`/course/${featured.id}`)}>
+              <Text style={[styles.heroButtonText, { color: colors.primaryForeground }]}>Resume learning</Text>
+              <Feather name="arrow-up-right" size={16} color={colors.primaryForeground} />
+            </Pressable>
+          </View>
+          <View style={[styles.heroOrb, { backgroundColor: colors.coral }]}>
+            <AppIcon />
+          </View>
         </View>
-        <View style={[styles.heroOrb, { backgroundColor: colors.coral }]}>
-          <AppIcon />
-        </View>
-      </View>
+      ) : null}
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.navy }]}>Explore your path</Text>
@@ -75,20 +97,22 @@ export default function HomeScreen() {
         <Text style={[styles.sectionTitle, { color: colors.navy }]}>Continue learning</Text>
         <Text style={[styles.progressLabel, { color: colors.inkSubtle }]}>{purchasedCourses.length ? '1 of 4 active' : 'Start today'}</Text>
       </View>
-      <Pressable style={[styles.coursePreview, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => router.push(`/course/${featured.id}`)}>
-        <Image source={featured.image} style={styles.courseImage} />
-        <View style={styles.courseInfo}>
-          <View style={[styles.miniPill, { backgroundColor: colors.accent }]}>
-            <Text style={[styles.miniPillText, { color: colors.coral }]}>JEE · PHYSICS</Text>
+      {featured ? (
+        <Pressable style={[styles.coursePreview, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => router.push(`/course/${featured.id}`)}>
+          <Image source={{ uri: featured.thumbnail }} style={styles.courseImage} />
+          <View style={styles.courseInfo}>
+            <View style={[styles.miniPill, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.miniPillText, { color: colors.coral }]}>{featured.category?.toUpperCase() || 'COURSE'}</Text>
+            </View>
+            <Text style={[styles.courseTitle, { color: colors.navy }]} numberOfLines={2}>{featured.title}</Text>
+            <Text style={[styles.courseMeta, { color: colors.inkSubtle }]}>₹{featured.price}</Text>
+            <View style={[styles.progressTrack, { backgroundColor: colors.secondary }]}>
+              <View style={[styles.progressFill, { backgroundColor: colors.coral, width: purchasedCourses.includes(String(featured.id)) ? '38%' : '0%' }]} />
+            </View>
           </View>
-          <Text style={[styles.courseTitle, { color: colors.navy }]} numberOfLines={2}>{featured.title}</Text>
-          <Text style={[styles.courseMeta, { color: colors.inkSubtle }]}>{featured.lessons} lessons · {featured.duration}</Text>
-          <View style={[styles.progressTrack, { backgroundColor: colors.secondary }]}>
-            <View style={[styles.progressFill, { backgroundColor: colors.coral, width: purchasedCourses.includes(featured.id) ? '38%' : '0%' }]} />
-          </View>
-        </View>
-        <Feather name="chevron-right" size={18} color={colors.inkSubtle} />
-      </Pressable>
+          <Feather name="chevron-right" size={18} color={colors.inkSubtle} />
+        </Pressable>
+      ) : null}
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.navy }]}>Next live class</Text>

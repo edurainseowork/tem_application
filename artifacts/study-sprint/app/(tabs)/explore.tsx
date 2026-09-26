@@ -3,8 +3,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CATEGORIES, COURSES, type CategoryId } from '@/constants/data';
+import { CATEGORIES, type CategoryId } from '@/constants/data';
 import { useColors } from '@/hooks/useColors';
+import { fetchCourses, Course } from '@/api/client';
 
 export default function ExploreScreen() {
   const colors = useColors();
@@ -13,9 +14,20 @@ export default function ExploreScreen() {
   const initialCategory = CATEGORIES.some((item) => item.id === params.category) ? (params.category as CategoryId) : 'all';
   const [category, setCategory] = useState<CategoryId>(initialCategory);
   const [query, setQuery] = useState('');
+  
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    fetchCourses().then((data) => {
+      setAllCourses(data);
+      setLoading(false);
+    });
+  }, []);
+
   const courses = useMemo(
-    () => COURSES.filter((course) => (category === 'all' || course.category === category) && `${course.title} ${course.subtitle}`.toLowerCase().includes(query.toLowerCase())),
-    [category, query],
+    () => allCourses.filter((course) => (category === 'all' || course.category === category) && `${course.title} ${course.description}`.toLowerCase().includes(query.toLowerCase())),
+    [category, query, allCourses],
   );
 
   return (
@@ -58,16 +70,16 @@ export default function ExploreScreen() {
           onPress={() => router.push(`/course/${course.id}`)}
           style={({ pressed }) => [styles.card, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.86 : 1 }]}
         >
-          <Image source={course.image} style={styles.image} />
+          <Image source={{ uri: course.thumbnail }} style={styles.image} />
           <View style={styles.cardBody}>
-            <View style={[styles.badge, { backgroundColor: colors[course.tone] }]}>
-              <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>{course.category.toUpperCase()}</Text>
+            <View style={[styles.badge, { backgroundColor: colors.coral }]}>
+              <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>{course.category?.toUpperCase() || 'COURSE'}</Text>
             </View>
             <Text style={[styles.cardTitle, { color: colors.navy }]}>{course.title}</Text>
-            <Text style={[styles.cardSubtitle, { color: colors.inkSubtle }]} numberOfLines={1}>{course.subtitle}</Text>
+            <Text style={[styles.cardSubtitle, { color: colors.inkSubtle }]} numberOfLines={1}>{course.description}</Text>
             <View style={styles.cardBottom}>
               <Text style={[styles.price, { color: colors.navy }]}>₹{course.price.toLocaleString('en-IN')}</Text>
-              <Text style={[styles.lessons, { color: colors.inkSubtle }]}>{course.lessons} lessons</Text>
+              <Text style={[styles.lessons, { color: colors.inkSubtle }]}>10 lessons</Text>
             </View>
           </View>
           <Feather name="chevron-right" size={18} color={colors.inkSubtle} />
