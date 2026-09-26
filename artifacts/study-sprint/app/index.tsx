@@ -46,8 +46,12 @@ export default function LoginScreen() {
       setError('Password must be at least 6 characters.');
       return;
     }
+    if (mode === 'signup' && !confirmPassword) {
+      setError('कृपया confirm password भरें।');
+      return;
+    }
     if (mode === 'signup' && password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError('आपका password और confirm password same नहीं है।');
       return;
     }
     setError('');
@@ -71,6 +75,9 @@ export default function LoginScreen() {
     setPassword('');
     setConfirmPassword('');
   };
+
+  const passwordMismatch =
+    mode === 'signup' && confirmPassword.length > 0 && password !== confirmPassword;
 
   if (!isReady) {
     return (
@@ -96,7 +103,7 @@ export default function LoginScreen() {
           <View style={[styles.iconHalo, { backgroundColor: colors.accent }]}>
             <AppIcon />
           </View>
-          <Text style={[styles.kicker, { color: colors.coral }]}>ADRENALINE</Text>
+          <Text style={[styles.kicker, { color: colors.coral }]}>EDURAIN</Text>
           <Text style={[styles.title, { color: colors.navy }]}>YOUR VICTORY STARTS HERE</Text>
         </View>
 
@@ -155,7 +162,10 @@ export default function LoginScreen() {
             <Feather name="lock" size={17} color={colors.inkSubtle} />
             <TextInput
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(value) => {
+                setPassword(value);
+                if (error) setError('');
+              }}
               placeholder="At least 6 characters"
               placeholderTextColor={colors.inkSubtle}
               style={[styles.input, { color: colors.navy }]}
@@ -167,11 +177,14 @@ export default function LoginScreen() {
           {mode === 'signup' ? (
             <>
               <Text style={[styles.label, { color: colors.navy }]}>Confirm password</Text>
-              <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+              <View style={[styles.inputWrap, { borderColor: passwordMismatch || error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
                 <Feather name="check" size={17} color={colors.inkSubtle} />
                 <TextInput
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(value) => {
+                    setConfirmPassword(value);
+                    if (error) setError('');
+                  }}
                   placeholder="Type it again"
                   placeholderTextColor={colors.inkSubtle}
                   style={[styles.input, { color: colors.navy }]}
@@ -180,6 +193,11 @@ export default function LoginScreen() {
                   autoCorrect={false}
                 />
               </View>
+              {passwordMismatch ? (
+                <Text style={[styles.error, { color: colors.destructive }]}>
+                  आपका password और confirm password same नहीं है।
+                </Text>
+              ) : null}
             </>
           ) : null}
           {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
