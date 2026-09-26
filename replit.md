@@ -1,6 +1,6 @@
-# StudySprint
+# EDURAIN
 
-StudySprint is a mobile learning app where students discover courses, unlock lessons, attend live classes, review recordings, read notes, and take weekly quizzes.
+EDURAIN is a mobile learning app where students discover courses, unlock lessons, attend live classes, review recordings, read notes, and take weekly quizzes.
 
 ## Run & Operate
 
@@ -27,7 +27,7 @@ StudySprint is a mobile learning app where students discover courses, unlock les
 - `artifacts/study-sprint/app/` — Expo Router screens for authentication, dashboard, course detail, profile, and quizzes
 - `artifacts/study-sprint/constants/data.ts` — local MVP course catalog and learning content fixtures
 - `artifacts/study-sprint/context/AppContext.tsx` — persisted login and purchased-course state
-- `artifacts/study-sprint/constants/colors.ts` — StudySprint theme tokens
+- `artifacts/study-sprint/constants/colors.ts` — EDURAIN theme tokens
 - `artifacts/study-sprint/assets/images/` — generated app icon and course artwork
 
 ## Architecture decisions

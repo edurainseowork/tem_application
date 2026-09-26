@@ -18,7 +18,7 @@ export function Wordmark({ light = false }: { light?: boolean }) {
     <View style={styles.wordmark}>
       <AppIcon small />
       <Text style={[styles.word, { color: light ? colors.primaryForeground : colors.navy }]}>
-        Study<Text style={{ color: colors.coral }}>Sprint</Text>
+        EDU<Text style={{ color: colors.coral }}>RAIN</Text>
       </Text>
     </View>
   );
