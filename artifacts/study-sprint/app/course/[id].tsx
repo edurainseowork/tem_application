@@ -5,34 +5,72 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COURSES, formatPrice, getCourse, LIVE_CLASSES, NOTES, RECORDINGS } from '@/constants/data';
+import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
-
-type ContentTab = 'notes' | 'live' | 'replays' | 'tests';
 
 export default function CourseDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const course = getCourse(id);
-  const { isPurchased, purchaseCourse } = useApp();
-  const unlocked = isPurchased(course.id);
+  const { isPurchased, purchaseCourse, user } = useApp();
+  
+  const [course, setCourse] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    fetch(`http://localhost:5000/api/courses/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          setCourse({
+            ...data,
+            subtitle: data.category + " Mastery",
+            instructor: "Expert Mentor",
+            validity: "12 months access",
+            lessons: 42,
+            students: "2k+ students",
+            originalPrice: Math.round(data.price * 1.5),
+            tone: 'coral',
+            duration: "40 hours"
+          });
+        }
+        setLoading(false);
+      })
+      .catch(e => {
+        console.error(e);
+        setLoading(false);
+      });
+  }, [id]);
+
+  const unlocked = course ? isPurchased(course.id.toString()) : false;
+  
   const [coupon, setCoupon] = useState('');
   const [discount, setDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
-  const [activeTab, setActiveTab] = useState<ContentTab>('notes');
-  const tabs = useMemo(() => [
-    { id: 'notes' as const, label: 'Notes', icon: 'file-text' as const },
-    { id: 'live' as const, label: 'Live', icon: 'radio' as const },
-    { id: 'replays' as const, label: 'Replays', icon: 'play-circle' as const },
-    { id: 'tests' as const, label: 'Tests', icon: 'check-circle' as const },
-  ], []);
+  const [activeTab, setActiveTab] = useState<'content'>('content');
+  const [courseContent, setCourseContent] = useState<any[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [loadingContent, setLoadingContent] = useState(false);
+
+  React.useEffect(() => {
+    if (unlocked && user?.uid && course) {
+      setLoadingContent(true);
+      fetch(`http://localhost:5000/api/content/${course.id}?uid=${user.uid}&admin=true`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setCourseContent(data.data);
+          }
+        })
+        .finally(() => setLoadingContent(false));
+    }
+  }, [unlocked, user?.uid, course]);
 
   const applyCoupon = () => {
     const code = coupon.trim().toUpperCase();
     if (code === 'FESTIVE20') {
-      setDiscount(Math.round(course.price * 0.2));
+      setDiscount(Math.round((course?.price || 0) * 0.2));
       setCouponMessage('20% off applied');
     } else if (code === 'STUDY100') {
       setDiscount(100);
@@ -44,17 +82,35 @@ export default function CourseDetailScreen() {
   };
 
   const buyNow = async () => {
+    if (!course) return;
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await purchaseCourse(course.id);
+    await purchaseCourse(course.id.toString());
   };
 
   const openExternal = (url: string) => Linking.openURL(url);
+
+  if (loading) {
+    return (
+      <View style={[styles.screen, { backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }]}>
+        <Text style={{ color: colors.navy }}>Loading course details...</Text>
+      </View>
+    );
+  }
+
+  if (!course) {
+    return (
+      <View style={[styles.screen, { backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }]}>
+        <Text style={{ color: colors.navy }}>Course not found.</Text>
+        <Pressable onPress={() => router.back()} style={{ marginTop: 20 }}><Text style={{ color: colors.coral }}>Go Back</Text></Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 28 }} showsVerticalScrollIndicator={false}>
         <View style={styles.imageWrap}>
-          <Image source={course.image} style={styles.cover} />
+          <Image source={{ uri: course.thumbnail }} style={styles.cover} />
           <View style={styles.imageOverlay} />
           <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.card }]}>
             <Feather name="arrow-left" size={20} color={colors.navy} />
@@ -71,16 +127,17 @@ export default function CourseDetailScreen() {
             <View style={styles.stat}><Feather name="clock" size={15} color={colors.coral} /><Text style={[styles.statText, { color: colors.inkSubtle }]}>{course.validity}</Text></View>
             <View style={styles.stat}><Feather name="layers" size={15} color={colors.coral} /><Text style={[styles.statText, { color: colors.inkSubtle }]}>{course.lessons} lessons</Text></View>
           </View>
+          <View style={[styles.aboutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.navy }]}>About this course</Text>
+            <Text style={[styles.description, { color: colors.inkSubtle }]}>{course.description}</Text>
+            <View style={[styles.instructorRow, { borderTopColor: colors.border }]}>
+              <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone] }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{course.instructor[0]}</Text></View>
+              <View><Text style={[styles.instructorLabel, { color: colors.inkSubtle }]}>YOUR MENTOR</Text><Text style={[styles.instructorName, { color: colors.navy }]}>{course.instructor}</Text></View>
+            </View>
+          </View>
+
           {!unlocked ? (
             <>
-              <View style={[styles.aboutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.cardTitle, { color: colors.navy }]}>About this course</Text>
-                <Text style={[styles.description, { color: colors.inkSubtle }]}>{course.description}</Text>
-                <View style={[styles.instructorRow, { borderTopColor: colors.border }]}>
-                  <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone] }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{course.instructor[0]}</Text></View>
-                  <View><Text style={[styles.instructorLabel, { color: colors.inkSubtle }]}>YOUR MENTOR</Text><Text style={[styles.instructorName, { color: colors.navy }]}>{course.instructor}</Text></View>
-                </View>
-              </View>
               <View style={[styles.couponCard, { backgroundColor: colors.accent }]}>
                 <View style={styles.couponHeader}><View><Text style={[styles.cardTitle, { color: colors.navy }]}>Have a coupon?</Text><Text style={[styles.couponHint, { color: colors.inkSubtle }]}>Try FESTIVE20 for 20% off</Text></View><Feather name="tag" size={20} color={colors.coral} /></View>
                 <View style={styles.couponInputRow}>
@@ -97,19 +154,56 @@ export default function CourseDetailScreen() {
             </>
           ) : (
             <>
-              <View style={[styles.unlockedIntro, { backgroundColor: colors.navy }]}>
+              <View style={[styles.unlockedIntro, { backgroundColor: colors.navy, marginTop: 12 }]}>
                 <View style={[styles.checkCircle, { backgroundColor: colors.coral }]}><Feather name="check" size={15} color={colors.primaryForeground} /></View>
-                <View style={{ flex: 1 }}><Text style={[styles.unlockedIntroTitle, { color: colors.primaryForeground }]}>You’re all set.</Text><Text style={[styles.unlockedIntroText, { color: '#bdc8df' }]}>Your next lesson is waiting.</Text></View>
+                <View style={{ flex: 1 }}><Text style={[styles.unlockedIntroTitle, { color: colors.primaryForeground }]}>You’re all set.</Text><Text style={[styles.unlockedIntroText, { color: '#bdc8df' }]}>Access your course materials below.</Text></View>
                 <Feather name="star" size={20} color={colors.gold} />
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-                {tabs.map((tab) => <Pressable key={tab.id} onPress={() => setActiveTab(tab.id)} style={[styles.tab, { borderColor: activeTab === tab.id ? colors.coral : colors.border, backgroundColor: activeTab === tab.id ? colors.accent : colors.card }]}><Feather name={tab.icon} size={15} color={activeTab === tab.id ? colors.coral : colors.inkSubtle} /><Text style={[styles.tabText, { color: activeTab === tab.id ? colors.coral : colors.inkSubtle }]}>{tab.label}</Text></Pressable>)}
-              </ScrollView>
-              <View style={[styles.contentPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {activeTab === 'notes' ? NOTES.map((note) => <Pressable key={note.id} onPress={() => openExternal('https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf')} style={styles.contentRow}><View style={[styles.contentIcon, { backgroundColor: colors.sky }]}><Feather name={note.icon} size={18} color={colors.lavender} /></View><View style={styles.contentRowBody}><Text style={[styles.contentTitle, { color: colors.navy }]}>{note.title}</Text><Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>{note.meta}</Text></View><Feather name="download" size={17} color={colors.inkSubtle} /></Pressable>) : null}
-                {activeTab === 'live' ? LIVE_CLASSES.map((session) => <View key={session.id} style={styles.contentRow}><View style={[styles.contentIcon, { backgroundColor: colors.mint }]}><Feather name="radio" size={18} color={colors.teal} /></View><View style={styles.contentRowBody}><View style={styles.sessionTitleRow}><Text style={[styles.contentTitle, { color: colors.navy }]}>{session.title}</Text>{session.live ? <Text style={[styles.liveBadge, { color: colors.teal }]}>LIVE SOON</Text> : null}</View><Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>{session.date} · {session.mentor}</Text></View><Pressable onPress={() => openExternal('https://www.youtube.com/live')} style={[styles.smallAction, { backgroundColor: colors.navy }]}><Text style={[styles.smallActionText, { color: colors.primaryForeground }]}>Join</Text></Pressable></View>) : null}
-                {activeTab === 'replays' ? RECORDINGS.map((recording) => <Pressable key={recording.id} onPress={() => openExternal('https://vimeo.com')} style={styles.contentRow}><View style={[styles.contentIcon, { backgroundColor: colors.accent }]}><Feather name="play" size={18} color={colors.coral} /></View><View style={styles.contentRowBody}><Text style={[styles.contentTitle, { color: colors.navy }]}>{recording.title}</Text><Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>{recording.meta}</Text>{recording.progress ? <View style={[styles.miniProgressTrack, { backgroundColor: colors.secondary }]}><View style={[styles.miniProgressFill, { backgroundColor: colors.coral, width: `${recording.progress}%` }]} /></View> : null}</View><Feather name="play-circle" size={18} color={colors.coral} /></Pressable>) : null}
-                {activeTab === 'tests' ? <Pressable onPress={() => router.push({ pathname: '/quiz/[id]', params: { id: course.id } })} style={styles.quizRow}><View style={[styles.contentIcon, { backgroundColor: colors.mint }]}><Feather name="check-circle" size={18} color={colors.success} /></View><View style={styles.contentRowBody}><Text style={[styles.contentTitle, { color: colors.navy }]}>Weekly Physics Check-in</Text><Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>3 questions · 5 min</Text></View><Feather name="arrow-right" size={18} color={colors.inkSubtle} /></Pressable> : null}
+              
+              <View style={[styles.contentPanel, { backgroundColor: colors.card, borderColor: colors.border, padding: 12 }]}>
+                {loadingContent ? (
+                  <Text style={{ color: colors.inkSubtle, padding: 10 }}>Loading content...</Text>
+                ) : (
+                  <>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>
+                      <Pressable onPress={() => setCurrentFolderId(null)}>
+                        <Text style={{ color: currentFolderId === null ? colors.navy : colors.coral, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Course Materials</Text>
+                      </Pressable>
+                      {currentFolderId !== null && (
+                        <>
+                          <Feather name="chevron-right" size={14} color={colors.inkSubtle} style={{ marginHorizontal: 4 }} />
+                          <Text style={{ color: colors.navy, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>
+                            {courseContent.find(c => c.id === currentFolderId)?.title || 'Folder'}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+
+                    {courseContent.filter(c => c.parentId === currentFolderId).length === 0 ? (
+                      <Text style={{ color: colors.inkSubtle, padding: 10, textAlign: 'center' }}>This folder is empty.</Text>
+                    ) : (
+                      courseContent.filter(c => c.parentId === currentFolderId).map(item => (
+                        <Pressable 
+                          key={item.id} 
+                          onPress={() => {
+                            if (item.type === 'folder') setCurrentFolderId(item.id);
+                            else if (item.url) openExternal(item.url);
+                          }}
+                          style={styles.contentRow}
+                        >
+                          <View style={[styles.contentIcon, { backgroundColor: item.type === 'folder' ? colors.mint : item.type === 'pdf' ? colors.sky : colors.accent }]}>
+                            <Feather name={item.type === 'folder' ? 'folder' : item.type === 'pdf' ? 'file-text' : 'play'} size={18} color={item.type === 'folder' ? colors.teal : item.type === 'pdf' ? colors.lavender : colors.coral} />
+                          </View>
+                          <View style={styles.contentRowBody}>
+                            <Text style={[styles.contentTitle, { color: colors.navy }]}>{item.title}</Text>
+                            <Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>{item.type.toUpperCase()}</Text>
+                          </View>
+                          <Feather name={item.type === 'folder' ? 'chevron-right' : 'external-link'} size={17} color={colors.inkSubtle} />
+                        </Pressable>
+                      ))
+                    )}
+                  </>
+                )}
               </View>
             </>
           )}

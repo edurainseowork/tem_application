@@ -1,39 +1,45 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppIcon } from '@/components/AppIcon';
 import { CATEGORIES } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
-import { fetchCourses, Course } from '@/api/client';
+
+const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, purchasedCourses } = useApp();
+  const { user } = useApp();
   const firstName = user?.name?.split(' ')[0] || 'Learner';
   
-  const [courses, setCourses] = React.useState<Course[]>([]);
+  const [banners, setBanners] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    fetchCourses().then((data) => {
-      setCourses(data);
-      setLoading(false);
-    });
+    fetch('http://localhost:5000/api/banners')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setBanners(data.data);
+        }
+        setLoading(false);
+      })
+      .catch(e => {
+        console.error(e);
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: colors.navy }}>Loading courses...</Text>
+        <Text style={{ color: colors.navy }}>Loading...</Text>
       </View>
     );
   }
-
-  const featured = courses[0];
 
   return (
     <ScrollView
@@ -51,22 +57,25 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {featured ? (
-        <View style={[styles.heroCard, { backgroundColor: colors.navy }]}>
-          <View style={styles.heroCopy}>
-            <Text style={[styles.heroKicker, { color: colors.gold }]}>KEEP THE STREAK ALIVE</Text>
-            <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>One focused session at a time.</Text>
-            <Text style={[styles.heroText, { color: '#bdc8df' }]}>You are closer than you think.</Text>
-            <Pressable style={[styles.heroButton, { backgroundColor: colors.coral }]} onPress={() => router.push(`/course/${featured.id}`)}>
-              <Text style={[styles.heroButtonText, { color: colors.primaryForeground }]}>Resume learning</Text>
-              <Feather name="arrow-up-right" size={16} color={colors.primaryForeground} />
-            </Pressable>
-          </View>
-          <View style={[styles.heroOrb, { backgroundColor: colors.coral }]}>
-            <AppIcon />
-          </View>
+      {/* Banner Carousel */}
+      {banners.length > 0 && (
+        <View style={{ marginBottom: 28, height: 160 }}>
+          <ScrollView 
+            horizontal 
+            pagingEnabled 
+            showsHorizontalScrollIndicator={false}
+            style={{ borderRadius: 16, overflow: 'hidden' }}
+          >
+            {banners.map((banner) => (
+              <Image 
+                key={banner.id} 
+                source={{ uri: banner.imageUrl }} 
+                style={{ width: width - 40, height: 160, resizeMode: 'cover' }} 
+              />
+            ))}
+          </ScrollView>
         </View>
-      ) : null}
+      )}
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.navy }]}>Explore your path</Text>
@@ -92,43 +101,6 @@ export default function HomeScreen() {
           </Pressable>
         ))}
       </View>
-
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.navy }]}>Continue learning</Text>
-        <Text style={[styles.progressLabel, { color: colors.inkSubtle }]}>{purchasedCourses.length ? '1 of 4 active' : 'Start today'}</Text>
-      </View>
-      {featured ? (
-        <Pressable style={[styles.coursePreview, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => router.push(`/course/${featured.id}`)}>
-          <Image source={{ uri: featured.thumbnail }} style={styles.courseImage} />
-          <View style={styles.courseInfo}>
-            <View style={[styles.miniPill, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.miniPillText, { color: colors.coral }]}>{featured.category?.toUpperCase() || 'COURSE'}</Text>
-            </View>
-            <Text style={[styles.courseTitle, { color: colors.navy }]} numberOfLines={2}>{featured.title}</Text>
-            <Text style={[styles.courseMeta, { color: colors.inkSubtle }]}>₹{featured.price}</Text>
-            <View style={[styles.progressTrack, { backgroundColor: colors.secondary }]}>
-              <View style={[styles.progressFill, { backgroundColor: colors.coral, width: purchasedCourses.includes(String(featured.id)) ? '38%' : '0%' }]} />
-            </View>
-          </View>
-          <Feather name="chevron-right" size={18} color={colors.inkSubtle} />
-        </Pressable>
-      ) : null}
-
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.navy }]}>Next live class</Text>
-        <Feather name="calendar" size={18} color={colors.inkSubtle} />
-      </View>
-      <View style={[styles.liveCard, { backgroundColor: colors.mint }]}>
-        <View style={[styles.liveDot, { backgroundColor: colors.teal }]} />
-        <View style={styles.liveCopy}>
-          <Text style={[styles.liveLabel, { color: colors.teal }]}>UP NEXT · TUE, 7:00 PM</Text>
-          <Text style={[styles.liveTitle, { color: colors.navy }]}>Ask me anything: Mechanics</Text>
-          <Text style={[styles.liveMeta, { color: colors.inkSubtle }]}>with Arjun Mehta</Text>
-        </View>
-        <Pressable style={[styles.joinButton, { backgroundColor: colors.navy }]} onPress={() => router.push(`/course/${featured.id}`)}>
-          <Text style={[styles.joinText, { color: colors.primaryForeground }]}>View</Text>
-        </Pressable>
-      </View>
     </ScrollView>
   );
 }
@@ -140,37 +112,11 @@ const styles = StyleSheet.create({
   greeting: { fontFamily: 'Inter_700Bold', fontSize: 27, letterSpacing: -0.8 },
   avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 17 },
-  heroCard: { minHeight: 200, borderRadius: 26, padding: 21, flexDirection: 'row', overflow: 'hidden', marginBottom: 28 },
-  heroCopy: { flex: 1, zIndex: 1 },
-  heroKicker: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1, marginBottom: 12 },
-  heroTitle: { fontFamily: 'Inter_700Bold', fontSize: 24, lineHeight: 29, letterSpacing: -0.7, maxWidth: 220 },
-  heroText: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 9 },
-  heroButton: { alignSelf: 'flex-start', borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18 },
-  heroButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
-  heroOrb: { width: 96, height: 96, borderRadius: 48, position: 'absolute', right: -18, bottom: -17, alignItems: 'center', justifyContent: 'center', opacity: 0.9 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.3 },
   seeAll: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
-  progressLabel: { fontFamily: 'Inter_500Medium', fontSize: 12 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 27 },
   categoryCard: { width: '48.4%', minHeight: 108, borderRadius: 19, borderWidth: 1, padding: 13, justifyContent: 'space-between' },
   categoryIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   categoryLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 11 },
-  coursePreview: { borderRadius: 20, borderWidth: 1, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 27 },
-  courseImage: { width: 92, height: 104, borderRadius: 14 },
-  courseInfo: { flex: 1 },
-  miniPill: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4 },
-  miniPillText: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.5 },
-  courseTitle: { fontFamily: 'Inter_700Bold', fontSize: 15, lineHeight: 19, marginTop: 8 },
-  courseMeta: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 5 },
-  progressTrack: { height: 5, borderRadius: 3, marginTop: 12, overflow: 'hidden' },
-  progressFill: { height: 5, borderRadius: 3 },
-  liveCard: { borderRadius: 19, padding: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  liveDot: { width: 10, height: 10, borderRadius: 5, alignSelf: 'flex-start', marginTop: 4 },
-  liveCopy: { flex: 1, marginLeft: 12 },
-  liveLabel: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.6 },
-  liveTitle: { fontFamily: 'Inter_700Bold', fontSize: 14, marginTop: 6 },
-  liveMeta: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 4 },
-  joinButton: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
-  joinText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
 });

@@ -17,56 +17,127 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppIcon } from '@/components/AppIcon';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/firebaseConfig';
 
 type AuthMode = 'login' | 'signup';
 
 export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, isReady, login, signup } = useApp();
+  const { user, isReady, login, getEmailByPhone, verifyOtpAndSignup, sendOtp, sendPasswordReset } = useApp();
   const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
 
   useEffect(() => {
     if (isReady && user) router.replace('/home');
   }, [isReady, user]);
 
   const handleContinue = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setError('Enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-    if (mode === 'signup' && !confirmPassword) {
-      setError('कृपया confirm password भरें।');
-      return;
-    }
-    if (mode === 'signup' && password !== confirmPassword) {
-      setError('आपका password और confirm password same नहीं है।');
-      return;
-    }
     setError('');
     setIsSubmitting(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const result = mode === 'login'
-      ? await login(normalizedEmail, password)
-      : await signup(name, normalizedEmail, password);
-    if (!result.ok) {
-      setError(result.error ?? 'Something went wrong. Please try again.');
+
+    if (mode === 'signup') {
+      if (otpSent) {
+        if (otp.length !== 6) {
+          setError('Please enter a 6-digit OTP.');
+          setIsSubmitting(false);
+          return;
+        }
+        const result = await verifyOtpAndSignup(phone, otp, name, email, password);
+        if (!result.ok) {
+          setError(result.error ?? 'Signup failed.');
+          setIsSubmitting(false);
+          return;
+        }
+        setIsSubmitting(false);
+        router.replace('/home');
+        return;
+      } else {
+        if (!name.trim()) { setError('Please enter your name.'); setIsSubmitting(false); return; }
+        if (!phone || phone.length < 10) { setError('Please enter a valid 10-digit phone number.'); setIsSubmitting(false); return; }
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) { setError('Enter a valid email address.'); setIsSubmitting(false); return; }
+        if (password.length < 6) { setError('Password must be at least 6 characters.'); setIsSubmitting(false); return; }
+        if (password !== confirmPassword) { setError('Passwords do not match.'); setIsSubmitting(false); return; }
+
+        const result = await sendOtp(phone);
+        if (!result.ok) {
+          setError(result.error ?? 'Failed to send OTP.');
+          setIsSubmitting(false);
+          return;
+        }
+        setOtpSent(true);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    // Login Flow
+    const normalizedInput = email.trim().toLowerCase();
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
       setIsSubmitting(false);
       return;
     }
+    
+    // Check if input is a 10 digit phone number
+    if (/^\d{10}$/.test(normalizedInput)) {
+      const res = await getEmailByPhone(normalizedInput);
+      if (!res.ok || !res.email) {
+        setError(res.error ?? 'Account not found for this phone number.');
+        setIsSubmitting(false);
+        return;
+      }
+      const loginRes = await login(res.email, password);
+      if (!loginRes.ok) {
+        setError(loginRes.error ?? 'Invalid password.');
+        setIsSubmitting(false);
+        return;
+      }
+      setIsSubmitting(false);
+      router.replace('/home');
+    } else {
+      // Treat as email
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedInput)) {
+        setError('Enter a valid email or 10-digit phone number.');
+        setIsSubmitting(false);
+        return;
+      }
+      const loginRes = await login(normalizedInput, password);
+      if (!loginRes.ok) {
+        setError(loginRes.error ?? 'Invalid email or password.');
+        setIsSubmitting(false);
+        return;
+      }
+      setIsSubmitting(false);
+      router.replace('/home');
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email || /^\d{10}$/.test(email.trim())) {
+      setError('Please enter your email address to reset password.');
+      return;
+    }
+    setIsSubmitting(true);
+    const res = await sendPasswordReset(email.trim().toLowerCase());
     setIsSubmitting(false);
-    router.replace('/home');
+    if (res.ok) {
+      alert('Password reset link sent to your email!');
+    } else {
+      setError(res.error ?? 'Failed to send reset link.');
+    }
   };
 
   const switchMode = (nextMode: AuthMode) => {
@@ -74,10 +145,11 @@ export default function LoginScreen() {
     setError('');
     setPassword('');
     setConfirmPassword('');
+    setOtpSent(false);
+    setOtp('');
   };
 
-  const passwordMismatch =
-    mode === 'signup' && confirmPassword.length > 0 && password !== confirmPassword;
+  const passwordMismatch = mode === 'signup' && confirmPassword.length > 0 && password !== confirmPassword;
 
   if (!isReady) {
     return (
@@ -108,7 +180,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.modeToggle, { backgroundColor: colors.secondary }]}>
+          <View style={[styles.modeToggle, { backgroundColor: colors.secondary, marginBottom: 10 }]}>
             {(['login', 'signup'] as AuthMode[]).map((item) => {
               const active = item === mode;
               return (
@@ -124,83 +196,158 @@ export default function LoginScreen() {
               );
             })}
           </View>
-          <Text style={[styles.formTitle, { color: colors.navy }]}>{mode === 'login' ? 'Welcome back' : 'Start your journey'}</Text>
+
+          <Text style={[styles.formTitle, { color: colors.navy, marginTop: 15 }]}>{mode === 'login' ? 'Welcome back' : 'Start your journey'}</Text>
           <Text style={[styles.formHint, { color: colors.inkSubtle }]}>{mode === 'login' ? 'Continue where you left off.' : 'Start building your learning streak.'}</Text>
 
           {mode === 'signup' ? (
             <>
-              <Text style={[styles.label, { color: colors.navy }]}>Your name</Text>
-              <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
+              {otpSent ? (
+                <>
+                  <Text style={[styles.label, { color: colors.navy }]}>Enter 6-digit OTP</Text>
+                  <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
+                    <Feather name="key" size={17} color={colors.inkSubtle} />
+                    <TextInput
+                      value={otp}
+                      onChangeText={setOtp}
+                      placeholder="123456"
+                      placeholderTextColor={colors.inkSubtle}
+                      style={[styles.input, { color: colors.navy }]}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                    />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.label, { color: colors.navy }]}>Your name</Text>
+                  <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
+                    <Feather name="user" size={17} color={colors.inkSubtle} />
+                    <TextInput
+                      value={name}
+                      onChangeText={setName}
+                      placeholder="e.g. Ananya"
+                      placeholderTextColor={colors.inkSubtle}
+                      style={[styles.input, { color: colors.navy }]}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                  <Text style={[styles.label, { color: colors.navy }]}>Phone Number</Text>
+                  <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
+                    <Feather name="phone" size={17} color={colors.inkSubtle} />
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', color: colors.navy }}>+91</Text>
+                    <TextInput
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="9876543210"
+                      placeholderTextColor={colors.inkSubtle}
+                      style={[styles.input, { color: colors.navy }]}
+                      keyboardType="number-pad"
+                      maxLength={10}
+                    />
+                  </View>
+                  <Text style={[styles.label, { color: colors.navy }]}>Email address</Text>
+                  <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+                    <Feather name="mail" size={17} color={colors.inkSubtle} />
+                    <TextInput
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholder="you@example.com"
+                      placeholderTextColor={colors.inkSubtle}
+                      style={[styles.input, { color: colors.navy }]}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                  <Text style={[styles.label, { color: colors.navy }]}>Password</Text>
+                  <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+                    <Feather name="lock" size={17} color={colors.inkSubtle} />
+                    <TextInput
+                      value={password}
+                      onChangeText={(value) => {
+                        setPassword(value);
+                        if (error) setError('');
+                      }}
+                      placeholder="At least 6 characters"
+                      placeholderTextColor={colors.inkSubtle}
+                      style={[styles.input, { color: colors.navy }]}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+                      <Feather name={showPassword ? "eye-off" : "eye"} size={17} color={colors.inkSubtle} />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.label, { color: colors.navy }]}>Confirm password</Text>
+                  <View style={[styles.inputWrap, { borderColor: passwordMismatch || error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+                    <Feather name="check" size={17} color={colors.inkSubtle} />
+                    <TextInput
+                      value={confirmPassword}
+                      onChangeText={(value) => {
+                        setConfirmPassword(value);
+                        if (error) setError('');
+                      }}
+                      placeholder="Type it again"
+                      placeholderTextColor={colors.inkSubtle}
+                      style={[styles.input, { color: colors.navy }]}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                  {passwordMismatch ? (
+                    <Text style={[styles.error, { color: colors.destructive }]}>
+                      आपका password और confirm password same नहीं है।
+                    </Text>
+                  ) : null}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={[styles.label, { color: colors.navy }]}>Email or Phone Number</Text>
+              <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
                 <Feather name="user" size={17} color={colors.inkSubtle} />
                 <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="e.g. Ananya"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com or 9876543210"
                   placeholderTextColor={colors.inkSubtle}
                   style={[styles.input, { color: colors.navy }]}
-                  autoCapitalize="words"
-                />
-              </View>
-            </>
-          ) : null}
-          <Text style={[styles.label, { color: colors.navy }]}>Email address</Text>
-          <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
-            <Feather name="mail" size={17} color={colors.inkSubtle} />
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={colors.inkSubtle}
-              style={[styles.input, { color: colors.navy }]}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-          <Text style={[styles.label, { color: colors.navy }]}>Password</Text>
-          <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
-            <Feather name="lock" size={17} color={colors.inkSubtle} />
-            <TextInput
-              value={password}
-              onChangeText={(value) => {
-                setPassword(value);
-                if (error) setError('');
-              }}
-              placeholder="At least 6 characters"
-              placeholderTextColor={colors.inkSubtle}
-              style={[styles.input, { color: colors.navy }]}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-          {mode === 'signup' ? (
-            <>
-              <Text style={[styles.label, { color: colors.navy }]}>Confirm password</Text>
-              <View style={[styles.inputWrap, { borderColor: passwordMismatch || error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
-                <Feather name="check" size={17} color={colors.inkSubtle} />
-                <TextInput
-                  value={confirmPassword}
-                  onChangeText={(value) => {
-                    setConfirmPassword(value);
-                    if (error) setError('');
-                  }}
-                  placeholder="Type it again"
-                  placeholderTextColor={colors.inkSubtle}
-                  style={[styles.input, { color: colors.navy }]}
-                  secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
               </View>
-              {passwordMismatch ? (
-                <Text style={[styles.error, { color: colors.destructive }]}>
-                  आपका password और confirm password same नहीं है।
-                </Text>
-              ) : null}
+              <Text style={[styles.label, { color: colors.navy }]}>Password</Text>
+              <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+                <Feather name="lock" size={17} color={colors.inkSubtle} />
+                <TextInput
+                  value={password}
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    if (error) setError('');
+                  }}
+                  placeholder="Your password"
+                  placeholderTextColor={colors.inkSubtle}
+                  style={[styles.input, { color: colors.navy }]}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+                  <Feather name={showPassword ? "eye-off" : "eye"} size={17} color={colors.inkSubtle} />
+                </Pressable>
+              </View>
+              <Pressable onPress={handleForgotPassword} style={{ alignSelf: 'flex-end', marginTop: 12 }}>
+                <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 12, color: colors.coral }}>Forgot Password?</Text>
+              </Pressable>
             </>
-          ) : null}
-          {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+          )}
+
+          {error ? <Text style={[styles.error, { color: colors.destructive, marginTop: 12 }]}>{error}</Text> : null}
+          
           <Pressable
             testID="continue-button"
             onPress={handleContinue}
@@ -214,7 +361,9 @@ export default function LoginScreen() {
               <ActivityIndicator color={colors.primaryForeground} />
             ) : (
               <>
-                <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{mode === 'login' ? 'Log in' : 'Create account'}</Text>
+                <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
+                  {mode === 'signup' ? (otpSent ? 'Verify & Sign up' : 'Send OTP') : 'Log in'}
+                </Text>
                 <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
               </>
             )}

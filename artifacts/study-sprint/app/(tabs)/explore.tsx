@@ -26,7 +26,7 @@ export default function ExploreScreen() {
   }, []);
 
   const courses = useMemo(
-    () => allCourses.filter((course) => (category === 'all' || course.category === category) && `${course.title} ${course.description}`.toLowerCase().includes(query.toLowerCase())),
+    () => allCourses.filter((course) => (category === 'all' || (course.category && course.category.toLowerCase() === category.toLowerCase())) && `${course.title} ${course.description}`.toLowerCase().includes(query.toLowerCase())),
     [category, query, allCourses],
   );
 

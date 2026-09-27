@@ -5,7 +5,8 @@ import {
   createUserWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 
@@ -21,6 +22,9 @@ type AppContextValue = {
   isReady: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signup: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  sendOtp: (phone: string) => Promise<{ ok: boolean; error?: string }>;
+  verifyOtpAndLogin: (phone: string, otp: string) => Promise<{ ok: boolean; error?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
   purchaseCourse: (courseId: string) => Promise<void>;
   isPurchased: (courseId: string) => boolean;
@@ -96,6 +100,65 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return { ok: true };
         } catch (error: any) {
           return { ok: false, error: error.message || 'Signup failed' };
+        }
+      },
+      sendOtp: async (phone: string) => {
+        try {
+          const res = await fetch('http://localhost:5000/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          return { ok: true };
+        } catch (error: any) {
+          return { ok: false, error: error.message || 'Failed to send OTP' };
+        }
+      },
+      verifyOtpAndSignup: async (phone, otp, name, email, password) => {
+        try {
+          const res = await fetch('http://localhost:5000/api/auth/verify-otp-and-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, otp, name, email, password }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          
+          // Once signed up in backend, login with Firebase directly
+          await signInWithEmailAndPassword(auth, email.trim(), password);
+          return { ok: true };
+        } catch (error: any) {
+          return { ok: false, error: error.message || 'Invalid OTP or Signup failed' };
+        }
+      },
+      getEmailByPhone: async (phone: string) => {
+        try {
+          const res = await fetch('http://localhost:5000/api/auth/get-email-by-phone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          return { ok: true, email: data.email };
+        } catch (error: any) {
+          return { ok: false, error: error.message || 'Account not found for this phone' };
+        }
+      },
+      sendPasswordReset: async (email: string) => {
+        try {
+          const res = await fetch('http://localhost:5000/api/auth/send-password-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          return { ok: true };
+        } catch (error: any) {
+          return { ok: false, error: error.message || 'Failed to send reset link' };
         }
       },
       logout: async () => {

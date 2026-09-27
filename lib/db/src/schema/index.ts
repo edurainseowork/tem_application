@@ -21,11 +21,27 @@ export const coursesTable = pgTable("courses", {
   pdfUrl: text("pdf_url"), // Protected notes
 });
 
+export const courseContentTable = pgTable("course_content", {
+  id: serial("id").primaryKey(),
+  courseId: integer("course_id").references(() => coursesTable.id, { onDelete: 'cascade' }).notNull(),
+  parentId: integer("parent_id"), // null = root level of course
+  type: text("type").notNull(), // 'folder', 'pdf', 'video'
+  title: text("title").notNull(),
+  url: text("url"), // file path or Vimeo URL
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const couponsTable = pgTable("coupons", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
   discountPercent: integer("discount_percent").notNull(),
   isPublic: boolean("is_public").default(false).notNull(),
+});
+
+export const bannersTable = pgTable("banners", {
+  id: serial("id").primaryKey(),
+  imageUrl: text("image_url").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const userCoursesTable = pgTable("user_courses", {
