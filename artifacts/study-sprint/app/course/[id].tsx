@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
+import { API_BASE_URL } from '@/api/client';
 
 export default function CourseDetailScreen() {
   const colors = useColors();
@@ -19,8 +20,18 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
-    fetch(`http://localhost:5000/api/courses/${id}`)
-      .then(res => res.json())
+    if (!id) return;
+    
+    fetch(`${API_BASE_URL}/api/courses/${id}`)
+      .then(async (res) => {
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          return res.json();
+        } else {
+          const text = await res.text();
+          throw new Error("Received non-JSON response from API: " + text.substring(0, 50));
+        }
+      })
       .then(data => {
         if (!data.error) {
           setCourse({
@@ -30,7 +41,7 @@ export default function CourseDetailScreen() {
             validity: "12 months access",
             lessons: 42,
             students: "2k+ students",
-            originalPrice: Math.round(data.price * 1.5),
+            originalPrice: Math.round((data.price || 0) * 1.5),
             tone: 'coral',
             duration: "40 hours"
           });
@@ -38,7 +49,7 @@ export default function CourseDetailScreen() {
         setLoading(false);
       })
       .catch(e => {
-        console.error(e);
+        console.warn("Course fetch error:", e.message);
         setLoading(false);
       });
   }, [id]);
@@ -56,13 +67,14 @@ export default function CourseDetailScreen() {
   React.useEffect(() => {
     if (unlocked && user?.uid && course) {
       setLoadingContent(true);
-      fetch(`http://localhost:5000/api/content/${course.id}?uid=${user.uid}&admin=true`)
+      fetch(`${API_BASE_URL}/api/content/${course.id}?uid=${user.uid}&admin=true`)
         .then(res => res.json())
         .then(data => {
           if (data.success) {
             setCourseContent(data.data);
           }
         })
+        .catch(e => console.error("Content fetch error:", e))
         .finally(() => setLoadingContent(false));
     }
   }, [unlocked, user?.uid, course]);
@@ -131,7 +143,7 @@ export default function CourseDetailScreen() {
             <Text style={[styles.cardTitle, { color: colors.navy }]}>About this course</Text>
             <Text style={[styles.description, { color: colors.inkSubtle }]}>{course.description}</Text>
             <View style={[styles.instructorRow, { borderTopColor: colors.border }]}>
-              <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone] }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{course.instructor[0]}</Text></View>
+              <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone as keyof typeof colors] as string }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{course.instructor[0]}</Text></View>
               <View><Text style={[styles.instructorLabel, { color: colors.inkSubtle }]}>YOUR MENTOR</Text><Text style={[styles.instructorName, { color: colors.navy }]}>{course.instructor}</Text></View>
             </View>
           </View>

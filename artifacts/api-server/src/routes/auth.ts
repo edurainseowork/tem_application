@@ -144,7 +144,7 @@ authRouter.post('/send-password-reset', async (req, res) => {
     const emailPayload = {
       from: { email: "support@edurain.in", name: "Edurain" },
       domain: "edurain.in",
-      template_id: "reset_password_94",
+      template_id: "password_3",
       recipients: [
         {
           to: [{ email: email, name: userName }],

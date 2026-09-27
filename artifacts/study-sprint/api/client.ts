@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 
 // HTTP Client for communicating with the backend API
-let API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
+export let API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
 
 if (__DEV__ && API_BASE_URL.includes('localhost') && Constants.expoConfig?.hostUri) {
   const host = Constants.expoConfig.hostUri.split(':')[0];

@@ -5,10 +5,11 @@ import {
   createUserWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
-  updateProfile,
-  sendPasswordResetEmail
+  updateProfile, 
+  sendPasswordResetEmail 
 } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
+import { API_BASE_URL } from '../api/client';
 
 type User = {
   uid: string;
@@ -104,7 +105,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       sendOtp: async (phone: string) => {
         try {
-          const res = await fetch('http://localhost:5000/api/auth/send-otp', {
+          const res = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone }),
@@ -118,7 +119,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       verifyOtpAndSignup: async (phone, otp, name, email, password) => {
         try {
-          const res = await fetch('http://localhost:5000/api/auth/verify-otp-and-signup', {
+          const res = await fetch(`${API_BASE_URL}/api/auth/verify-otp-and-signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone, otp, name, email, password }),
@@ -135,7 +136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       getEmailByPhone: async (phone: string) => {
         try {
-          const res = await fetch('http://localhost:5000/api/auth/get-email-by-phone', {
+          const res = await fetch(`${API_BASE_URL}/api/auth/get-email-by-phone`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone }),
@@ -149,7 +150,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       sendPasswordReset: async (email: string) => {
         try {
-          const res = await fetch('http://localhost:5000/api/auth/send-password-reset', {
+          const res = await fetch(`${API_BASE_URL}/api/auth/send-password-reset`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),
