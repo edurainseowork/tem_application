@@ -7,6 +7,7 @@ if (__DEV__ && API_BASE_URL.includes('localhost') && Constants.expoConfig?.hostU
   const host = Constants.expoConfig.hostUri.split(':')[0];
   API_BASE_URL = `http://${host}:5000`;
 }
+console.log("DEBUG: API_BASE_URL is resolved to ->", API_BASE_URL);
 
 export interface Course {
   id: number;

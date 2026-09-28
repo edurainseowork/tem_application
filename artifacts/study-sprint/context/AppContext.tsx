@@ -23,8 +23,8 @@ type AppContextValue = {
   isReady: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signup: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  sendOtp: (phone: string) => Promise<{ ok: boolean; error?: string }>;
-  verifyOtpAndLogin: (phone: string, otp: string) => Promise<{ ok: boolean; error?: string }>;
+  verifyOtpAndSignup: (phone: string, accessToken: string, name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  getEmailByPhone: (phone: string) => Promise<{ ok: boolean; email?: string; error?: string }>;
   sendPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
   purchaseCourse: (courseId: string) => Promise<void>;
@@ -103,26 +103,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return { ok: false, error: error.message || 'Signup failed' };
         }
       },
-      sendOtp: async (phone: string) => {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
-          return { ok: true };
-        } catch (error: any) {
-          return { ok: false, error: error.message || 'Failed to send OTP' };
-        }
-      },
-      verifyOtpAndSignup: async (phone, otp, name, email, password) => {
+      verifyOtpAndSignup: async (phone, accessToken, name, email, password) => {
         try {
           const res = await fetch(`${API_BASE_URL}/api/auth/verify-otp-and-signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, otp, name, email, password }),
+            body: JSON.stringify({ phone, accessToken, name, email, password }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
@@ -131,7 +117,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           await signInWithEmailAndPassword(auth, email.trim(), password);
           return { ok: true };
         } catch (error: any) {
-          return { ok: false, error: error.message || 'Invalid OTP or Signup failed' };
+          return { ok: false, error: error.message || 'Invalid Access Token or Signup failed' };
         }
       },
       getEmailByPhone: async (phone: string) => {

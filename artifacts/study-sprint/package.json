@@ -55,6 +55,12 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "firebase": "^11.0.1"
+    "@msg91comm/sendotp-react-native": "^3.0.0",
+    "expo-dev-client": "^57.0.19",
+    "firebase": "^11.0.1",
+    "react-native-webview": "^14.0.1",
+    "expo": "~57.0.25",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
   }
 }

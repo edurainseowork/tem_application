@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -16,69 +16,41 @@ if (!getApps().length) {
     credential: cert(serviceAccount),
   });
 }
+// Backend is fully stateless for AWS Lambda. 
+// We will send reqId to the frontend and expect it back during verification.
 
-// Temporary in-memory OTP store (To be moved to Postgres in production)
-const otpStore = new Map<string, { otp: string, expiresAt: number }>();
-
-authRouter.post('/send-otp', async (req, res) => {
+authRouter.post('/verify-otp-and-signup', async (req: Request, res: Response): Promise<any> => {
   try {
-    const { phone } = req.body;
-    if (!phone) return res.status(400).json({ error: 'Phone number is required' });
-
-    // Generate 6 digit random OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Save to store with 5 mins expiry
-    otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
-
-    // Send via MSG91 Flow (SMS) API since the template is an SMS template
-    const MSG91_TEMPLATE_ID = '6ab9308a73311e86f902caf2';
-    const response = await axios.post(
-      'https://control.msg91.com/api/v5/flow/',
-      {
-        template_id: MSG91_TEMPLATE_ID,
-        short_url: "0",
-        recipients: [
-          {
-            mobiles: `91${phone}`,
-            var: otp // Maps to ##var## in the template
-          }
-        ]
-      },
-      {
-        headers: {
-          authkey: MSG91_AUTH_KEY,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-    console.log('MSG91 Response:', response.data);
-    console.log('Generated OTP:', otp); // Also log the OTP for manual testing
-
-    res.json({ success: true, message: 'OTP sent successfully via MSG91 Flow API' });
-  } catch (error: any) {
-    console.error('Error sending OTP:', error?.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to send OTP' });
-  }
-});
-
-authRouter.post('/verify-otp-and-signup', async (req, res) => {
-  try {
-    const { name, email, password, phone, otp } = req.body;
-    if (!phone || !otp || !email || !password || !name) {
-      return res.status(400).json({ error: 'All fields (name, email, password, phone, otp) are required' });
+    const { name, email, password, phone, accessToken } = req.body;
+    if (!phone || !accessToken || !email || !password || !name) {
+      return res.status(400).json({ error: 'All fields (name, email, password, phone, accessToken) are required' });
     }
 
-    const storedData = otpStore.get(phone);
-    if (!storedData) return res.status(400).json({ error: 'No OTP requested for this number' });
-    if (Date.now() > storedData.expiresAt) return res.status(400).json({ error: 'OTP expired' });
-    if (storedData.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
+    // Verify via MSG91 verifyAccessToken API
+    try {
+      const verifyResponse = await axios.post(
+        'https://control.msg91.com/api/v5/widget/verifyAccessToken',
+        {
+          authkey: MSG91_AUTH_KEY,
+          "access-token": accessToken
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-    // OTP Verified! Clear it
-    otpStore.delete(phone);
+      if (verifyResponse.data.type === 'error') {
+        return res.status(400).json({ error: verifyResponse.data.message || 'Invalid Access Token' });
+      }
+    } catch (msg91Error: any) {
+      console.error('MSG91 Verify Error:', msg91Error?.response?.data || msg91Error.message);
+      return res.status(400).json({ error: 'Failed to verify token with MSG91' });
+    }
 
     // Create user in Firebase with Email, Password, and Phone Number
-    const phoneWithCode = `+91${phone}`;
+    const phoneWithCode = phone.startsWith('+') ? phone : `+91${phone}`;
     try {
       await getAuth().createUser({
         email: email.trim(),
@@ -97,7 +69,7 @@ authRouter.post('/verify-otp-and-signup', async (req, res) => {
   }
 });
 
-authRouter.post('/get-email-by-phone', async (req, res) => {
+authRouter.post('/get-email-by-phone', async (req: Request, res: Response): Promise<any> => {
   try {
     const { phone } = req.body;
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
@@ -120,7 +92,7 @@ authRouter.post('/get-email-by-phone', async (req, res) => {
   }
 });
 
-authRouter.post('/send-password-reset', async (req, res) => {
+authRouter.post('/send-password-reset', async (req: Request, res: Response): Promise<any> => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });

@@ -17,15 +17,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppIcon } from '@/components/AppIcon';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
+import { DefaultWidget } from '@msg91comm/sendotp-react-native';
 
 type AuthMode = 'login' | 'signup';
 
 export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, isReady, login, getEmailByPhone, verifyOtpAndSignup, sendOtp, sendPasswordReset } = useApp();
+  const { user, isReady, login, getEmailByPhone, verifyOtpAndSignup, sendPasswordReset } = useApp();
   const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -36,7 +36,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [showWidget, setShowWidget] = useState(false);
 
   useEffect(() => {
     if (isReady && user) router.replace('/home');
@@ -48,39 +48,17 @@ export default function LoginScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     if (mode === 'signup') {
-      if (otpSent) {
-        if (otp.length !== 6) {
-          setError('Please enter a 6-digit OTP.');
-          setIsSubmitting(false);
-          return;
-        }
-        const result = await verifyOtpAndSignup(phone, otp, name, email, password);
-        if (!result.ok) {
-          setError(result.error ?? 'Signup failed.');
-          setIsSubmitting(false);
-          return;
-        }
-        setIsSubmitting(false);
-        router.replace('/home');
-        return;
-      } else {
-        if (!name.trim()) { setError('Please enter your name.'); setIsSubmitting(false); return; }
-        if (!phone || phone.length < 10) { setError('Please enter a valid 10-digit phone number.'); setIsSubmitting(false); return; }
-        const normalizedEmail = email.trim().toLowerCase();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) { setError('Enter a valid email address.'); setIsSubmitting(false); return; }
-        if (password.length < 6) { setError('Password must be at least 6 characters.'); setIsSubmitting(false); return; }
-        if (password !== confirmPassword) { setError('Passwords do not match.'); setIsSubmitting(false); return; }
+      if (!name.trim()) { setError('Please enter your name.'); setIsSubmitting(false); return; }
+      if (!phone || phone.length < 10) { setError('Please enter a valid 10-digit phone number.'); setIsSubmitting(false); return; }
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) { setError('Enter a valid email address.'); setIsSubmitting(false); return; }
+      if (password.length < 6) { setError('Password must be at least 6 characters.'); setIsSubmitting(false); return; }
+      if (password !== confirmPassword) { setError('Passwords do not match.'); setIsSubmitting(false); return; }
 
-        const result = await sendOtp(phone);
-        if (!result.ok) {
-          setError(result.error ?? 'Failed to send OTP.');
-          setIsSubmitting(false);
-          return;
-        }
-        setOtpSent(true);
-        setIsSubmitting(false);
-        return;
-      }
+      // Open MSG91 Widget
+      setShowWidget(true);
+      setIsSubmitting(false);
+      return;
     }
 
     // Login Flow
@@ -141,12 +119,28 @@ export default function LoginScreen() {
   };
 
   const switchMode = (nextMode: AuthMode) => {
+    if (nextMode === mode) return;
     setMode(nextMode);
     setError('');
     setPassword('');
     setConfirmPassword('');
-    setOtpSent(false);
-    setOtp('');
+    setShowWidget(false);
+  };
+
+  const handleVerificationComplete = async (result: any) => {
+    setShowWidget(false);
+    if (result.success) {
+      setIsSubmitting(true);
+      const res = await verifyOtpAndSignup(phone, result.message, name, email, password);
+      if (!res.ok) {
+        setError(res.error ?? 'Signup failed.');
+      } else {
+        router.replace('/home');
+      }
+      setIsSubmitting(false);
+    } else {
+      setError(result.message || 'OTP Verification failed');
+    }
   };
 
   const passwordMismatch = mode === 'signup' && confirmPassword.length > 0 && password !== confirmPassword;
@@ -201,110 +195,90 @@ export default function LoginScreen() {
           <Text style={[styles.formHint, { color: colors.inkSubtle }]}>{mode === 'login' ? 'Continue where you left off.' : 'Start building your learning streak.'}</Text>
 
           {mode === 'signup' ? (
-            <>
-              {otpSent ? (
-                <>
-                  <Text style={[styles.label, { color: colors.navy }]}>Enter 6-digit OTP</Text>
-                  <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
-                    <Feather name="key" size={17} color={colors.inkSubtle} />
-                    <TextInput
-                      value={otp}
-                      onChangeText={setOtp}
-                      placeholder="123456"
-                      placeholderTextColor={colors.inkSubtle}
-                      style={[styles.input, { color: colors.navy }]}
-                      keyboardType="number-pad"
-                      maxLength={6}
-                    />
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.label, { color: colors.navy }]}>Your name</Text>
-                  <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
-                    <Feather name="user" size={17} color={colors.inkSubtle} />
-                    <TextInput
-                      value={name}
-                      onChangeText={setName}
-                      placeholder="e.g. Ananya"
-                      placeholderTextColor={colors.inkSubtle}
-                      style={[styles.input, { color: colors.navy }]}
-                      autoCapitalize="words"
-                    />
-                  </View>
-                  <Text style={[styles.label, { color: colors.navy }]}>Phone Number</Text>
-                  <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
-                    <Feather name="phone" size={17} color={colors.inkSubtle} />
-                    <Text style={{ fontFamily: 'Inter_600SemiBold', color: colors.navy }}>+91</Text>
-                    <TextInput
-                      value={phone}
-                      onChangeText={setPhone}
-                      placeholder="9876543210"
-                      placeholderTextColor={colors.inkSubtle}
-                      style={[styles.input, { color: colors.navy }]}
-                      keyboardType="number-pad"
-                      maxLength={10}
-                    />
-                  </View>
-                  <Text style={[styles.label, { color: colors.navy }]}>Email address</Text>
-                  <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
-                    <Feather name="mail" size={17} color={colors.inkSubtle} />
-                    <TextInput
-                      value={email}
-                      onChangeText={setEmail}
-                      placeholder="you@example.com"
-                      placeholderTextColor={colors.inkSubtle}
-                      style={[styles.input, { color: colors.navy }]}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-                  <Text style={[styles.label, { color: colors.navy }]}>Password</Text>
-                  <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
-                    <Feather name="lock" size={17} color={colors.inkSubtle} />
-                    <TextInput
-                      value={password}
-                      onChangeText={(value) => {
-                        setPassword(value);
-                        if (error) setError('');
-                      }}
-                      placeholder="At least 6 characters"
-                      placeholderTextColor={colors.inkSubtle}
-                      style={[styles.input, { color: colors.navy }]}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                    <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
-                      <Feather name={showPassword ? "eye-off" : "eye"} size={17} color={colors.inkSubtle} />
-                    </Pressable>
-                  </View>
-                  <Text style={[styles.label, { color: colors.navy }]}>Confirm password</Text>
-                  <View style={[styles.inputWrap, { borderColor: passwordMismatch || error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
-                    <Feather name="check" size={17} color={colors.inkSubtle} />
-                    <TextInput
-                      value={confirmPassword}
-                      onChangeText={(value) => {
-                        setConfirmPassword(value);
-                        if (error) setError('');
-                      }}
-                      placeholder="Type it again"
-                      placeholderTextColor={colors.inkSubtle}
-                      style={[styles.input, { color: colors.navy }]}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-                  {passwordMismatch ? (
-                    <Text style={[styles.error, { color: colors.destructive }]}>
-                      आपका password और confirm password same नहीं है।
-                    </Text>
-                  ) : null}
-                </>
-              )}
-            </>
+              <>
+                <Text style={[styles.label, { color: colors.navy }]}>Your name</Text>
+                <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
+                  <Feather name="user" size={17} color={colors.inkSubtle} />
+                  <TextInput
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="e.g. Ananya"
+                    placeholderTextColor={colors.inkSubtle}
+                    style={[styles.input, { color: colors.navy }]}
+                    autoCapitalize="words"
+                  />
+                </View>
+                <Text style={[styles.label, { color: colors.navy }]}>Phone Number</Text>
+                <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
+                  <Feather name="phone" size={17} color={colors.inkSubtle} />
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', color: colors.navy }}>+91</Text>
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="9876543210"
+                    placeholderTextColor={colors.inkSubtle}
+                    style={[styles.input, { color: colors.navy }]}
+                    keyboardType="number-pad"
+                    maxLength={10}
+                  />
+                </View>
+                <Text style={[styles.label, { color: colors.navy }]}>Email address</Text>
+                <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+                  <Feather name="mail" size={17} color={colors.inkSubtle} />
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="you@example.com"
+                    placeholderTextColor={colors.inkSubtle}
+                    style={[styles.input, { color: colors.navy }]}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+                <Text style={[styles.label, { color: colors.navy }]}>Password</Text>
+                <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+                  <Feather name="lock" size={17} color={colors.inkSubtle} />
+                  <TextInput
+                    value={password}
+                    onChangeText={(value) => {
+                      setPassword(value);
+                      if (error) setError('');
+                    }}
+                    placeholder="At least 6 characters"
+                    placeholderTextColor={colors.inkSubtle}
+                    style={[styles.input, { color: colors.navy }]}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+                    <Feather name={showPassword ? "eye-off" : "eye"} size={17} color={colors.inkSubtle} />
+                  </Pressable>
+                </View>
+                <Text style={[styles.label, { color: colors.navy }]}>Confirm password</Text>
+                <View style={[styles.inputWrap, { borderColor: passwordMismatch || error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
+                  <Feather name="check" size={17} color={colors.inkSubtle} />
+                  <TextInput
+                    value={confirmPassword}
+                    onChangeText={(value) => {
+                      setConfirmPassword(value);
+                      if (error) setError('');
+                    }}
+                    placeholder="Type it again"
+                    placeholderTextColor={colors.inkSubtle}
+                    style={[styles.input, { color: colors.navy }]}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+                {passwordMismatch ? (
+                  <Text style={[styles.error, { color: colors.destructive }]}>
+                    आपका password और confirm password same नहीं है।
+                  </Text>
+                ) : null}
+              </>
           ) : (
             <>
               <Text style={[styles.label, { color: colors.navy }]}>Email or Phone Number</Text>
@@ -362,7 +336,7 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-                  {mode === 'signup' ? (otpSent ? 'Verify & Sign up' : 'Send OTP') : 'Log in'}
+                  {mode === 'signup' ? 'Verify & Sign up' : 'Log in'}
                 </Text>
                 <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
               </>
@@ -377,6 +351,15 @@ export default function LoginScreen() {
           <Text style={[styles.bottomNoteText, { color: colors.inkSubtle }]}>Your learning space is private and secure.</Text>
         </View>
       </ScrollView>
+      {showWidget && (
+        <DefaultWidget
+          visible={showWidget}
+          onClose={() => setShowWidget(false)}
+          onCompletion={handleVerificationComplete}
+          widgetId="366942657566373130303537"
+          tokenAuth="575019TcH2mXdWy6ab9fc92P1"
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
