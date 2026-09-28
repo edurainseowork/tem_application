@@ -18,7 +18,7 @@ import { AppIcon } from '@/components/AppIcon';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
 import { auth } from '@/firebaseConfig';
-import { DefaultWidget } from '@msg91comm/sendotp-react-native';
+import { Msg91Widget as DefaultWidget } from '@/components/Msg91Widget';
 
 type AuthMode = 'login' | 'signup';
 
