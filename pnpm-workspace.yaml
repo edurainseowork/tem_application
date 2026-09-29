@@ -30,9 +30,11 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
 
 packages:
-  - artifacts/*
-  - lib/*
-  - lib/integrations/*
+  - Frontend
+  - Backend
+  - CMS-Portal
+  - shared/*
+  - shared/integrations/*
   - scripts
 
 catalog:

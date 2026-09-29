@@ -3,17 +3,18 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "start": "pnpm --filter @workspace/study-sprint exec expo start",
-    "web": "pnpm --filter @workspace/study-sprint exec expo start --web",
-    "android": "pnpm --filter @workspace/study-sprint exec expo run:android",
-    "ios": "pnpm --filter @workspace/study-sprint exec expo run:ios",
+    "start": "pnpm --filter @workspace/frontend exec expo start",
+    "web": "pnpm --filter @workspace/frontend exec expo start --web",
+    "android": "pnpm --filter @workspace/frontend exec expo run:android",
+    "ios": "pnpm --filter @workspace/frontend exec expo run:ios",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./Frontend\" --filter \"./Backend\" --filter \"./scripts\" --if-present run typecheck",
+    "dev:all": "concurrently \"pnpm --filter @workspace/backend dev\" \"pnpm --filter @workspace/frontend exec expo run:android\""
   },
   "private": true,
-  "dependencies": {},
   "devDependencies": {
+    "concurrently": "^10.0.5",
     "lightningcss-win32-x64-msvc": "^1.33.0",
     "prettier": "^3.9.6",
     "typescript": "~5.9.3"
