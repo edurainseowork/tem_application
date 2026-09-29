@@ -1,0 +1,8 @@
+{
+  "files.exclude": {
+    "Backend/node_modules": true,
+    "Frontend/node_modules": true,
+    "CMS-Portal/node_modules": true,
+    "shared/**/node_modules": true
+  }
+}
