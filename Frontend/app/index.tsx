@@ -14,11 +14,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppIcon } from '@/components/AppIcon';
+import { AppIcon } from '@/components/Shared/AppIcon';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
 import { auth } from '@/firebaseConfig';
-import { Msg91Widget as DefaultWidget } from '@/components/Msg91Widget';
+import { Msg91Widget as DefaultWidget } from '@/components/Shared/Msg91Widget';
 
 type AuthMode = 'login' | 'signup';
 
