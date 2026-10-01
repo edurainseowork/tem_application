@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { auth } from '../firebase'
+import { apiFetch, uploadFile, API_BASE_URL, type AdminCourse } from '../api'
+import CourseManager from './CourseManager'
+import CategoryManager from './CategoryManager'
 import '../index.css'
 
 function App() {
@@ -9,17 +12,11 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [activeStudents, setActiveStudents] = useState(0);
 
-  // Course Form State
-  const [courseTitle, setCourseTitle] = useState('');
-  const [courseDesc, setCourseDesc] = useState('');
-  const [coursePrice, setCoursePrice] = useState('');
-  const [courseCategory, setCourseCategory] = useState('JEE');
-  const [customCategory, setCustomCategory] = useState('');
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [coursesList, setCoursesList] = useState<any[]>([]);
+  const [coursesList, setCoursesList] = useState<AdminCourse[]>([]);
   
   // Toast State
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
@@ -47,8 +44,7 @@ function App() {
 
   const fetchBanners = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/banners');
-      const data = await res.json();
+      const data = await apiFetch('/banners');
       if (data.success) {
         setBannersList(data.data);
       }
@@ -59,8 +55,7 @@ function App() {
 
   const fetchCourseContent = async (courseId: string) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/content/${courseId}?admin=true`);
-      const data = await res.json();
+      const data = await apiFetch(`/content/${courseId}`);
       if (data.success) {
         setCourseContentList(data.data);
       }
@@ -79,20 +74,32 @@ function App() {
     }
   }, [selectedCourseForContent]);
 
-  const ALLOWED_ADMIN_EMAILS = [
-    'abhinavpvt1906@gmail.com',
-    'edurainseowork@gmail.com'
-  ];
-
+  // Admin access is decided by the `admin` custom claim set server-side
+  // (Backend/tools/set-admin.mjs). The backend re-checks it on every request.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser && currentUser.email && !ALLOWED_ADMIN_EMAILS.includes(currentUser.email.toLowerCase())) {
-        signOut(auth);
-        setUser(null);
-        alert('You are not an admin');
-      } else {
-        setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        const token = await currentUser.getIdTokenResult(true).catch(() => null);
+        if (!token) {
+          await signOut(auth);
+          setUser(null);
+          setLoginError('Could not verify your session with Firebase. Check your internet connection and try again.');
+          setLoading(false);
+          return;
+        }
+        if (token.claims.admin !== true) {
+          await signOut(auth);
+          setUser(null);
+          setLoginError(
+            `Password is correct, but ${currentUser.email} is not a CMS admin yet. ` +
+            `Run in Backend/:  node tools/set-admin.mjs grant ${currentUser.email}  — then log in again.`
+          );
+          setLoading(false);
+          return;
+        }
+        setLoginError('');
       }
+      setUser(currentUser);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -100,9 +107,8 @@ function App() {
 
   const fetchCourses = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/courses');
-      const data = await res.json();
-      setCoursesList(data);
+      const data = await apiFetch<{ data: AdminCourse[] }>('/admin/courses');
+      setCoursesList(data.data);
     } catch (e) {
       console.error("Failed to fetch courses", e);
     }
@@ -110,8 +116,7 @@ function App() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/stats');
-      const data = await res.json();
+      const data = await apiFetch('/stats');
       if (data.success) {
         setActiveStudents(data.activeStudents);
       }
@@ -121,7 +126,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (user && (activeTab === 'courses' || activeTab === 'dashboard')) {
+    if (user && (activeTab === 'courses' || activeTab === 'dashboard' || activeTab === 'content')) {
       fetchCourses();
       if (activeTab === 'dashboard') {
         fetchStats();
@@ -134,87 +139,23 @@ function App() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ALLOWED_ADMIN_EMAILS.includes(email.toLowerCase())) {
-      showToast('You are not an admin', 'error');
-      return;
-    }
+    setLoginError('');
+    setIsLoggingIn(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      showToast('Logged in successfully', 'success');
+      await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (error: any) {
-      showToast('Login failed: ' + error.message, 'error');
-    }
-  };
-
-  const handlePublishCourse = async () => {
-    const finalCategory = courseCategory === 'custom' ? customCategory : courseCategory;
-
-    if (!courseTitle || !courseDesc || !coursePrice || !thumbnailFile || !finalCategory) {
-      showToast("Please fill all fields and select a thumbnail.", "error");
-      return;
-    }
-    setIsPublishing(true);
-    try {
-      // 1. Upload Thumbnail
-      const formData = new FormData();
-      formData.append('image', thumbnailFile);
-      
-      const uploadRes = await fetch('http://localhost:5000/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const uploadData = await uploadRes.json();
-      if (!uploadData.success) throw new Error("Image upload failed");
-      
-      const thumbnailUrl = 'http://localhost:5000' + uploadData.url;
-
-      // 2. Create Course
-      const courseRes = await fetch('http://localhost:5000/api/courses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: courseTitle,
-          description: courseDesc,
-          price: Number(coursePrice) * 100, // API expects paise/cents
-          thumbnail: thumbnailUrl,
-          category: finalCategory
-        })
-      });
-      const courseData = await courseRes.json();
-      if (courseData.success) {
-        showToast("Course Published Successfully!", "success");
-        setCourseTitle('');
-        setCourseDesc('');
-        setCoursePrice('');
-        setCourseCategory('JEE');
-        setCustomCategory('');
-        setThumbnailFile(null);
-        fetchCourses(); // Refresh list
+      const code: string = error?.code || '';
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+        setLoginError('Wrong email or password, or this email has no Firebase account. Check Firebase Console → Authentication → Users.');
+      } else if (code === 'auth/too-many-requests') {
+        setLoginError('Too many attempts. Wait a few minutes or reset the password in Firebase Console.');
+      } else if (code === 'auth/network-request-failed') {
+        setLoginError('Network error — check your internet connection.');
       } else {
-        throw new Error(courseData.error || "Failed to create course");
+        setLoginError('Login failed: ' + (error?.message || code));
       }
-    } catch (err: any) {
-      showToast("Error: " + err.message, "error");
     } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  const handleDeleteCourse = async (id: number) => {
-    if (!window.confirm("Are you sure you want to delete this course?")) return;
-    try {
-      const res = await fetch(`http://localhost:5000/api/courses/${id}`, {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast("Course deleted successfully", "success");
-        setCoursesList(coursesList.filter(c => c.id !== id));
-      } else {
-        showToast(data.error, "error");
-      }
-    } catch (e: any) {
-      showToast("Error deleting course: " + e.message, "error");
+      setIsLoggingIn(false);
     }
   };
 
@@ -241,29 +182,18 @@ function App() {
       let finalContentUrl = contentUrl;
       
       if (contentType === 'PDF' && contentFile) {
-        const formData = new FormData();
-        formData.append('image', contentFile); // Backend upload expects 'image'
-        
-        const uploadRes = await fetch('http://localhost:5000/api/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const uploadData = await uploadRes.json();
-        if (!uploadData.success) throw new Error("File upload failed. Ensure it is under 500KB.");
-        finalContentUrl = 'http://localhost:5000' + uploadData.url;
+        finalContentUrl = await uploadFile(contentFile);
       }
 
-      const res = await fetch(`http://localhost:5000/api/content/${selectedCourseForContent}`, {
+      const data = await apiFetch(`/content/${selectedCourseForContent}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           parentId: currentFolderId,
           type: contentType.toLowerCase(), // 'folder', 'pdf', 'video'
           title: contentTitle,
-          url: finalContentUrl
-        })
+          url: contentType === 'Folder' ? null : finalContentUrl
+        }
       });
-      const data = await res.json();
       
       if (data.success) {
         showToast(`${contentType} "${contentTitle}" added successfully!`, "success");
@@ -284,8 +214,7 @@ function App() {
   const handleDeleteContent = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this item?")) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/content/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await apiFetch(`/content/${id}`, { method: 'DELETE' });
       if (data.success) {
         showToast("Item deleted", "success");
         fetchCourseContent(selectedCourseForContent);
@@ -309,24 +238,10 @@ function App() {
     
     setIsUploadingBanner(true);
     try {
-      const formData = new FormData();
-      formData.append('image', bannerFile);
-      
-      const uploadRes = await fetch('http://localhost:5000/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const uploadData = await uploadRes.json();
-      if (!uploadData.success) throw new Error("Image upload failed");
-      
-      const imageUrl = 'http://localhost:5000' + uploadData.url;
+      // Banners store absolute URLs (the banners API predates server-relative paths).
+      const imageUrl = API_BASE_URL + await uploadFile(bannerFile);
 
-      const res = await fetch('http://localhost:5000/api/banners', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl })
-      });
-      const data = await res.json();
+      const data = await apiFetch('/banners', { method: 'POST', body: { imageUrl } });
       if (data.success) {
         showToast("Banner uploaded successfully", "success");
         setBannerFile(null);
@@ -344,8 +259,7 @@ function App() {
   const handleDeleteBanner = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this banner?")) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/banners/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await apiFetch(`/banners/${id}`, { method: 'DELETE' });
       if (data.success) {
         showToast("Banner deleted", "success");
         fetchBanners();
@@ -387,7 +301,12 @@ function App() {
             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} 
             required 
           />
-          <button type="submit" className="btn" style={{ width: '100%', marginTop: 'var(--space-sm)' }}>Login</button>
+          {loginError && (
+            <p role="alert" style={{ color: '#ff8a8a', fontSize: '0.85rem', lineHeight: 1.5, background: 'rgba(255,94,94,0.1)', border: '1px solid rgba(255,94,94,0.3)', borderRadius: '8px', padding: '10px 12px', wordBreak: 'break-word' }}>
+              {loginError}
+            </p>
+          )}
+          <button type="submit" disabled={isLoggingIn} className="btn" style={{ width: '100%', marginTop: 'var(--space-sm)' }}>{isLoggingIn ? 'Logging in...' : 'Login'}</button>
         </form>
       </div>
     );
@@ -434,6 +353,9 @@ function App() {
           <div className={`nav-link ${activeTab === 'courses' ? 'active' : ''}`} onClick={() => setActiveTab('courses')}>
             Course Manager
           </div>
+          <div className={`nav-link ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
+            Categories
+          </div>
           <div className={`nav-link ${activeTab === 'content' ? 'active' : ''}`} onClick={() => setActiveTab('content')}>
             Upload Content (PDF/Video/Test)
           </div>
@@ -452,6 +374,7 @@ function App() {
           <h1 className="page-title">
             {activeTab === 'dashboard' && 'Overview'}
             {activeTab === 'courses' && 'Course Manager'}
+            {activeTab === 'categories' && 'Category Management'}
             {activeTab === 'content' && 'Post-Purchase Content'}
             {activeTab === 'banners' && 'Manage Homepage Banners'}
             {activeTab === 'coupons' && 'Coupon Generator'}
@@ -470,6 +393,10 @@ function App() {
                 <span className="stat-value">{coursesList.length}</span>
               </div>
               <div className="glass-card stat-card">
+                <span className="stat-label">Published</span>
+                <span className="stat-value">{coursesList.filter(c => c.isPublished).length}</span>
+              </div>
+              <div className="glass-card stat-card">
                 <span className="stat-label">Active Students</span>
                 <span className="stat-value">{activeStudents}</span>
               </div>
@@ -482,73 +409,11 @@ function App() {
         )}
 
         {activeTab === 'courses' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-            
-            {/* Existing Courses List */}
-            <div className="glass-card">
-              <h3 style={{ marginBottom: 'var(--space-md)' }}>Existing Courses</h3>
-              {coursesList.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)' }}>No courses found.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                  {coursesList.map((course) => (
-                    <div key={course.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <div>
-                        <h4 style={{ color: 'white', marginBottom: '4px' }}>{course.title}</h4>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>₹{(course.price / 100).toFixed(2)} • {course.category}</span>
-                      </div>
-                      <button onClick={() => handleDeleteCourse(course.id)} className="btn" style={{ background: '#ff5e5e', border: 'none', padding: '6px 12px', fontSize: '0.8rem' }}>Delete</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <CourseManager courses={coursesList} reloadCourses={fetchCourses} showToast={showToast} />
+        )}
 
-            {/* Create New Course Form */}
-            <div className="glass-card">
-              <h3 style={{ marginBottom: 'var(--space-md)' }}>Create New Course</h3>
-              <form style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Course Title</label>
-                  <input type="text" value={courseTitle} onChange={e => setCourseTitle(e.target.value)} placeholder="e.g. Advanced Mechanics" className="input-field" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Category</label>
-                  <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
-                    <select value={courseCategory} onChange={e => setCourseCategory(e.target.value)} className="input-field" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }}>
-                      <option value="JEE">JEE</option>
-                      <option value="NEET">NEET</option>
-                      <option value="Foundation">Foundation</option>
-                      <option value="custom">Add Custom Category...</option>
-                    </select>
-                    {courseCategory === 'custom' && (
-                      <input type="text" value={customCategory} onChange={e => setCustomCategory(e.target.value)} placeholder="Type new category..." className="input-field" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Description</label>
-                  <textarea rows={4} value={courseDesc} onChange={e => setCourseDesc(e.target.value)} placeholder="Course description..." className="input-field" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                </div>
-                <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Price (INR)</label>
-                    <input type="number" value={coursePrice} onChange={e => setCoursePrice(e.target.value)} placeholder="999" className="input-field" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Upload Thumbnail (From PC)</label>
-                    <input type="file" accept="image/png, image/jpeg, image/webp" onChange={e => setThumbnailFile(e.target.files?.[0] || null)} className="input-field" style={{ width: '100%', padding: '9px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', cursor: 'pointer' }} />
-                    <p style={{ fontSize: '0.75rem', color: '#ff5e5e', marginTop: '6px' }}>
-                      * Max size: 500 KB. Strict dimensions: 1280x720 px (16:9) to prevent UI breaking.
-                    </p>
-                  </div>
-                </div>
-                <button type="button" onClick={handlePublishCourse} disabled={isPublishing} className="btn" style={{ alignSelf: 'flex-start', marginTop: 'var(--space-sm)' }}>
-                  {isPublishing ? 'Publishing...' : 'Publish Course'}
-                </button>
-              </form>
-            </div>
-          </div>
+        {activeTab === 'categories' && (
+          <CategoryManager showToast={showToast} onCategoriesChanged={fetchCourses} />
         )}
 
         {activeTab === 'content' && (
@@ -559,7 +424,7 @@ function App() {
                 <select value={selectedCourseForContent} onChange={e => setSelectedCourseForContent(e.target.value)} style={{ flex: 1, padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
                   <option value="">Select Target Course</option>
                   {coursesList.map(course => (
-                    <option key={course.id} value={course.id}>{course.title}</option>
+                    <option key={course.id} value={course.id}>{course.title}{course.isPublished ? '' : ' (draft)'}</option>
                   ))}
                 </select>
               </div>

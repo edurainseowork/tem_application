@@ -3,7 +3,8 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CATEGORIES } from '@/constants/data';
+import { CATEGORIES, type Category as CategoryStyle } from '@/constants/data';
+import { API_BASE_URL, fetchCategories } from '@/api/client';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -17,9 +18,22 @@ export default function HomeScreen() {
   
   const [banners, setBanners] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
+  // Category cards come from the CMS; icons/tones cycle through the built-in styles.
+  const [categoryCards, setCategoryCards] = React.useState<{ id: string; label: string; icon: CategoryStyle['icon']; tone: CategoryStyle['tone'] }[]>([]);
 
   React.useEffect(() => {
-    fetch('http://localhost:5000/api/banners')
+    const palette = CATEGORIES.filter((c) => c.id !== 'all');
+    const all = CATEGORIES.find((c) => c.id === 'all')!;
+    fetchCategories().then((data) => {
+      setCategoryCards([
+        ...data.map((c, i) => ({ id: c.slug, label: c.name, icon: palette[i % palette.length].icon, tone: palette[i % palette.length].tone })),
+        { id: 'all', label: all.label, icon: all.icon, tone: all.tone },
+      ]);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    fetch(`${API_BASE_URL}/api/banners`)
       .then(res => res.json())
       .then(data => {
         if (data.success) {
@@ -84,7 +98,7 @@ export default function HomeScreen() {
         </Pressable>
       </View>
       <View style={styles.categoryGrid}>
-        {CATEGORIES.map((category) => (
+        {categoryCards.map((category) => (
           <Pressable
             key={category.id}
             onPress={() => router.push({ pathname: '/(tabs)/explore', params: { category: category.id } })}
