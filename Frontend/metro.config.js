@@ -6,6 +6,15 @@ const workspaceRoot = path.resolve(projectRoot, '..');
 
 const config = getDefaultConfig(projectRoot);
 
+// Ignore backend, git, and IDE metadata folders so Metro bundler stays lightweight & fast
+config.resolver.blockList = [
+  /Backend\/.*/,
+  /\.git\/.*/,
+  /\.idea\/.*/,
+  /\.gsd\/.*/,
+  /node_modules\/.*\/node_modules\/.*/
+];
+
 config.watchFolders = [workspaceRoot];
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),

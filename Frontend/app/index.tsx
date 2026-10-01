@@ -131,13 +131,14 @@ export default function LoginScreen() {
     setShowWidget(false);
     if (result.success) {
       setIsSubmitting(true);
+      setError('');
       const res = await verifyOtpAndSignup(phone, result.message, name, email, password);
+      setIsSubmitting(false);
       if (!res.ok) {
         setError(res.error ?? 'Signup failed.');
       } else {
         router.replace('/home');
       }
-      setIsSubmitting(false);
     } else {
       setError(result.message || 'OTP Verification failed');
     }

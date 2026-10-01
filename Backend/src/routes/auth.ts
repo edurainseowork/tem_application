@@ -37,19 +37,20 @@ authRouter.post('/verify-otp-and-signup', async (req: Request, res: Response): P
         {
           headers: {
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: 4000
         }
       );
 
-      if (verifyResponse.data.type === 'error') {
+      if (verifyResponse.data?.type === 'error') {
         return res.status(400).json({ error: verifyResponse.data.message || 'Invalid Access Token' });
       }
     } catch (msg91Error: any) {
       console.error('MSG91 Verify Error:', msg91Error?.response?.data || msg91Error.message);
-      return res.status(400).json({ error: 'Failed to verify token with MSG91' });
+      return res.status(400).json({ error: 'Failed to verify OTP with MSG91' });
     }
 
-    // Create user in Firebase with Email, Password, and Phone Number
+    // Create or Update user in Firebase with Email, Password, and Phone Number
     const phoneWithCode = phone.startsWith('+') ? phone : `+91${phone}`;
     try {
       await getAuth().createUser({
@@ -59,7 +60,29 @@ authRouter.post('/verify-otp-and-signup', async (req: Request, res: Response): P
         displayName: name.trim()
       });
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'Failed to create user in Firebase' });
+      if (error.code === 'auth/email-already-in-use' || error.code === 'auth/phone-number-already-exists') {
+        try {
+          const existingUser = await getAuth().getUserByEmail(email.trim());
+          await getAuth().updateUser(existingUser.uid, {
+            password: password,
+            phoneNumber: phoneWithCode,
+            displayName: name.trim()
+          });
+        } catch (updateErr) {
+          try {
+            const existingUserByPhone = await getAuth().getUserByPhoneNumber(phoneWithCode);
+            await getAuth().updateUser(existingUserByPhone.uid, {
+              email: email.trim(),
+              password: password,
+              displayName: name.trim()
+            });
+          } catch (e) {
+            console.error('Failed to update existing user:', e);
+          }
+        }
+      } else {
+        return res.status(400).json({ error: error.message || 'Failed to create user in Firebase' });
+      }
     }
 
     res.json({ success: true, message: 'User created successfully' });
