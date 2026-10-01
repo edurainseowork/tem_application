@@ -3,9 +3,11 @@ import Constants from 'expo-constants';
 // HTTP Client for communicating with the backend API
 export let API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
 
-if (__DEV__ && API_BASE_URL.includes('localhost') && Constants.expoConfig?.hostUri) {
+if (__DEV__ && Constants.expoConfig?.hostUri) {
   const host = Constants.expoConfig.hostUri.split(':')[0];
-  API_BASE_URL = `http://${host}:5000`;
+  if (host) {
+    API_BASE_URL = `http://${host}:5000`;
+  }
 }
 console.log("DEBUG: API_BASE_URL is resolved to ->", API_BASE_URL);
 
