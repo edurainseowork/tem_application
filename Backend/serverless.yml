@@ -8,6 +8,10 @@ provider:
     DATABASE_URL: ${env:DATABASE_URL, ''}
     RAZORPAY_KEY_ID: ${env:RAZORPAY_KEY_ID, ''}
     RAZORPAY_KEY_SECRET: ${env:RAZORPAY_KEY_SECRET, ''}
+    NODE_ENV: production
+    CORS_ORIGINS: ${env:CORS_ORIGINS, ''}
+    PUBLIC_BASE_URL: ${env:PUBLIC_BASE_URL, ''}
+    FIREBASE_SERVICE_ACCOUNT: ${env:FIREBASE_SERVICE_ACCOUNT, ''}
 
 functions:
   api:

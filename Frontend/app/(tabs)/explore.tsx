@@ -3,30 +3,41 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CATEGORIES, type CategoryId } from '@/constants/data';
+import { formatPrice } from '@/constants/data';
 import { useColors } from '@/hooks/useColors';
-import { fetchCourses, Course } from '@/api/client';
+import { fetchCategories, fetchCourses, Course, Category } from '@/api/client';
 
 export default function ExploreScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ category?: string }>();
-  const initialCategory = CATEGORIES.some((item) => item.id === params.category) ? (params.category as CategoryId) : 'all';
-  const [category, setCategory] = useState<CategoryId>(initialCategory);
+  // 'all' or a category slug managed from the CMS
+  const [category, setCategory] = useState<string>(params.category || 'all');
   const [query, setQuery] = useState('');
   
   const [allCourses, setAllCourses] = useState<Course[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
-    fetchCourses().then((data) => {
-      setAllCourses(data);
+    Promise.all([fetchCourses(), fetchCategories()]).then(([courseData, categoryData]) => {
+      setAllCourses(courseData);
+      setCategories(categoryData);
       setLoading(false);
     });
   }, []);
 
+  React.useEffect(() => {
+    if (params.category) setCategory(params.category);
+  }, [params.category]);
+
+  const pills = useMemo(
+    () => [{ id: 'all', shortLabel: 'All' }, ...categories.map((c) => ({ id: c.slug, shortLabel: c.name }))],
+    [categories],
+  );
+
   const courses = useMemo(
-    () => allCourses.filter((course) => (category === 'all' || (course.category && course.category.toLowerCase() === category.toLowerCase())) && `${course.title} ${course.description}`.toLowerCase().includes(query.toLowerCase())),
+    () => allCourses.filter((course) => (category === 'all' || course.categorySlug === category) && `${course.title} ${course.description}`.toLowerCase().includes(query.toLowerCase())),
     [category, query, allCourses],
   );
 
@@ -51,7 +62,7 @@ export default function ExploreScreen() {
         {query ? <Pressable onPress={() => setQuery('')}><Feather name="x-circle" size={17} color={colors.inkSubtle} /></Pressable> : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pills}>
-        {CATEGORIES.map((item) => {
+        {pills.map((item) => {
           const active = item.id === category;
           return (
             <Pressable key={item.id} onPress={() => setCategory(item.id)} style={[styles.pill, { backgroundColor: active ? colors.navy : colors.card, borderColor: active ? colors.navy : colors.border }]}>
@@ -61,10 +72,10 @@ export default function ExploreScreen() {
         })}
       </ScrollView>
       <View style={styles.resultHeader}>
-        <Text style={[styles.resultCount, { color: colors.navy }]}>{courses.length} courses</Text>
+        <Text style={[styles.resultCount, { color: colors.navy }]}>{loading ? 'Loading…' : `${courses.length} courses`}</Text>
         <Text style={[styles.sortText, { color: colors.inkSubtle }]}>Curated for you</Text>
       </View>
-      {courses.length ? courses.map((course) => (
+      {loading ? null : courses.length ? courses.map((course) => (
         <Pressable
           key={course.id}
           onPress={() => router.push(`/course/${course.id}`)}
@@ -78,8 +89,10 @@ export default function ExploreScreen() {
             <Text style={[styles.cardTitle, { color: colors.navy }]}>{course.title}</Text>
             <Text style={[styles.cardSubtitle, { color: colors.inkSubtle }]} numberOfLines={1}>{course.description}</Text>
             <View style={styles.cardBottom}>
-              <Text style={[styles.price, { color: colors.navy }]}>₹{course.price.toLocaleString('en-IN')}</Text>
-              <Text style={[styles.lessons, { color: colors.inkSubtle }]}>10 lessons</Text>
+              <Text style={[styles.price, { color: colors.navy }]}>{formatPrice(course.price / 100)}</Text>
+              {course.originalPrice && course.originalPrice > course.price ? (
+                <Text style={[styles.lessons, { color: colors.inkSubtle, textDecorationLine: 'line-through' }]}>{formatPrice(course.originalPrice / 100)}</Text>
+              ) : null}
             </View>
           </View>
           <Feather name="chevron-right" size={18} color={colors.inkSubtle} />

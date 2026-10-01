@@ -8,11 +8,15 @@ import uploadRouter from "./upload.js";
 import bannersRouter from "./banners.js";
 import { authRouter } from "./auth.js";
 import statsRouter from "./stats.js";
+import categoriesRouter from "./categories.js";
+import adminRouter from "./admin/index.js";
 
 const router = Router();
 
 router.use("/health", healthRouter);
 router.use("/courses", coursesRouter);
+router.use("/categories", categoriesRouter);
+router.use("/admin", adminRouter);
 router.use("/coupons", couponsRouter);
 router.use("/razorpay", razorpayRouter);
 router.use("/content", contentRouter);

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
-import { API_BASE_URL } from '@/api/client';
+import { ApiError, fetchCourse, fetchCourseContent, type CourseContentItem } from '@/api/client';
 
 export default function CourseDetailScreen() {
   const colors = useColors();
@@ -22,36 +22,25 @@ export default function CourseDetailScreen() {
   React.useEffect(() => {
     if (!id) return;
     
-    fetch(`${API_BASE_URL}/api/courses/${id}`)
-      .then(async (res) => {
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.indexOf("application/json") !== -1) {
-          return res.json();
-        } else {
-          const text = await res.text();
-          throw new Error("Received non-JSON response from API: " + text.substring(0, 50));
-        }
-      })
+    fetchCourse(id)
       .then(data => {
-        if (!data.error) {
+        if (data) {
           setCourse({
             ...data,
+            // API prices are in paise; this screen works in rupees.
+            price: data.price / 100,
+            originalPrice: data.originalPrice && data.originalPrice > data.price ? data.originalPrice / 100 : null,
             subtitle: data.category + " Mastery",
             instructor: "Expert Mentor",
             validity: "12 months access",
             lessons: 42,
             students: "2k+ students",
-            originalPrice: Math.round((data.price || 0) * 1.5),
             tone: 'coral',
             duration: "40 hours"
           });
         }
-        setLoading(false);
       })
-      .catch(e => {
-        console.warn("Course fetch error:", e.message);
-        setLoading(false);
-      });
+      .finally(() => setLoading(false));
   }, [id]);
 
   const unlocked = course ? isPurchased(course.id.toString()) : false;
@@ -60,21 +49,26 @@ export default function CourseDetailScreen() {
   const [discount, setDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'content'>('content');
-  const [courseContent, setCourseContent] = useState<any[]>([]);
+  const [courseContent, setCourseContent] = useState<CourseContentItem[]>([]);
+  const [contentError, setContentError] = useState('');
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
 
   React.useEffect(() => {
     if (unlocked && user?.uid && course) {
       setLoadingContent(true);
-      fetch(`${API_BASE_URL}/api/content/${course.id}?uid=${user.uid}&admin=true`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setCourseContent(data.data);
-          }
+      setContentError('');
+      // Access is checked server-side against the signed-in user's purchases.
+      fetchCourseContent(course.id)
+        .then(setCourseContent)
+        .catch(e => {
+          setCourseContent([]);
+          setContentError(
+            e instanceof ApiError && e.status === 403
+              ? 'We could not confirm your purchase yet. If you just paid, please try again in a moment.'
+              : 'Could not load course materials. Please try again.',
+          );
         })
-        .catch(e => console.error("Content fetch error:", e))
         .finally(() => setLoadingContent(false));
     }
   }, [unlocked, user?.uid, course]);
@@ -159,7 +153,7 @@ export default function CourseDetailScreen() {
                 {couponMessage ? <Text style={[styles.couponMessage, { color: couponMessage.includes('applied') ? colors.success : colors.destructive }]}>{couponMessage}</Text> : null}
               </View>
               <View style={styles.checkoutRow}>
-                <View><Text style={[styles.totalLabel, { color: colors.inkSubtle }]}>TOTAL TODAY</Text><Text style={[styles.totalPrice, { color: colors.navy }]}>{formatPrice(course.price - discount)} <Text style={[styles.originalPrice, { color: colors.inkSubtle }]}>{formatPrice(course.originalPrice)}</Text></Text></View>
+                <View><Text style={[styles.totalLabel, { color: colors.inkSubtle }]}>TOTAL TODAY</Text><Text style={[styles.totalPrice, { color: colors.navy }]}>{formatPrice(course.price - discount)} {course.originalPrice ? <Text style={[styles.originalPrice, { color: colors.inkSubtle }]}>{formatPrice(course.originalPrice)}</Text> : null}</Text></View>
                 <Pressable testID="buy-now-button" onPress={buyNow} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>Buy now</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
               </View>
               <View style={styles.lockedNote}><Feather name="lock" size={13} color={colors.inkSubtle} /><Text style={[styles.lockedText, { color: colors.inkSubtle }]}>Notes, live classes, replays & tests unlock instantly.</Text></View>
@@ -175,6 +169,8 @@ export default function CourseDetailScreen() {
               <View style={[styles.contentPanel, { backgroundColor: colors.card, borderColor: colors.border, padding: 12 }]}>
                 {loadingContent ? (
                   <Text style={{ color: colors.inkSubtle, padding: 10 }}>Loading content...</Text>
+                ) : contentError ? (
+                  <Text style={{ color: colors.inkSubtle, padding: 10, textAlign: 'center' }}>{contentError}</Text>
                 ) : (
                   <>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>

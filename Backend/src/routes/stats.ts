@@ -2,10 +2,11 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { count } from "drizzle-orm";
+import { requireAdmin } from "../middlewares/auth";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", requireAdmin, async (req, res) => {
   try {
     const userCountResult = await db.select({ count: count() }).from(usersTable);
     const activeStudents = userCountResult[0].count;
