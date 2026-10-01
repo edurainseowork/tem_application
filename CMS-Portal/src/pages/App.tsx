@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, type User } from 'firebase/auth'
-import { auth } from './firebase'
-import './index.css'
+import { auth } from '../firebase'
+import '../index.css'
 
 function App() {
   const [activeTab, setActiveTab] = useState('courses');
