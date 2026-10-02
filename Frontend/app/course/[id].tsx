@@ -9,12 +9,10 @@ import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
 import { ApiError, fetchCourse, fetchCourseContent, type CourseContentItem } from '@/api/client';
-import { fetchCourseLiveClasses } from '@/api/liveClasses';
-import { getLiveClassStatus, type LiveClass } from '@workspace/api-zod';
+import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
 import { useNow } from '@/hooks/useNow';
 import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
 import { validateCoupon, redeemCoupon, fetchPublicCoupons } from '@/api/coupons';
-import type { Coupon } from '@workspace/api-zod';
 
 export default function CourseDetailScreen() {
   const colors = useColors();
@@ -54,7 +52,7 @@ export default function CourseDetailScreen() {
   const [coupon, setCoupon] = useState('');
   const [discount, setDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
-  const [publicCoupon, setPublicCoupon] = useState<Coupon | null>(null);
+  const [publicCoupon, setPublicCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [couponValid, setCouponValid] = useState(false);
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
@@ -107,7 +105,7 @@ export default function CourseDetailScreen() {
     return () => { active = false; };
   }, [unlocked, user?.uid, course]);
 
-  const visibleLiveClasses = liveClasses.filter((liveClass) => getLiveClassStatus(liveClass.startTime, liveClass.endTime, now) !== 'ended');
+  const visibleLiveClasses = liveClasses.filter((liveClass) => getLiveClassStatus(liveClass, now) !== 'ended');
 
   // Suggest a public coupon that applies to this course
   React.useEffect(() => {
