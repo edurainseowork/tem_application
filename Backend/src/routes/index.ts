@@ -10,6 +10,8 @@ import { authRouter } from "./auth.js";
 import statsRouter from "./stats.js";
 import categoriesRouter from "./categories.js";
 import adminRouter from "./admin/index.js";
+import liveClassesRouter from "./liveClasses.js";
+import notificationsRouter from "./notifications.js";
 
 const router = Router();
 
@@ -24,5 +26,7 @@ router.use("/upload", uploadRouter);
 router.use("/banners", bannersRouter);
 router.use("/auth", authRouter);
 router.use("/stats", statsRouter);
+router.use("/live-classes", liveClassesRouter);
+router.use("/notifications", notificationsRouter);
 
 export default router;
