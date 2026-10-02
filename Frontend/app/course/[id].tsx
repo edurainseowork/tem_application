@@ -125,6 +125,20 @@ export default function CourseDetailScreen() {
   const applyCoupon = async () => {
     const code = coupon.trim().toUpperCase();
     if (!course || !code) return;
+    
+    // Offline/Static fallback coupons
+    if (code === 'FESTIVE20') {
+      setDiscount(Math.round(course.price * 0.2));
+      setCouponMessage('20% off applied');
+      setCouponValid(true);
+      return;
+    } else if (code === 'STUDY100') {
+      setDiscount(100);
+      setCouponMessage('₹100 off applied');
+      setCouponValid(true);
+      return;
+    }
+
     setApplyingCoupon(true);
     try {
       const quote = await validateCoupon(code, course.id);

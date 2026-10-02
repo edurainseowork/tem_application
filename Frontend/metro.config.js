@@ -14,6 +14,7 @@ config.resolver.blockList = [
   /\.idea\/.*/,
   /\.gsd\/.*/,
   /node_modules\/\.pnpm\/.*/,
+  /node_modules\/.*\/node_modules\/.*/
 ];
 
 config.watchFolders = [workspaceRoot];
