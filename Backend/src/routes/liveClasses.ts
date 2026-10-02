@@ -86,7 +86,7 @@ router.get("/courses/:courseId/live-classes", requireAuth, async (req, res) => {
   }
 
   try {
-    if (!(await canAccessCourse(res.locals.firebaseUser, courseId))) {
+    if (!(await canAccessCourse(req.auth!, courseId))) {
       res.status(403).json({ error: "You are not enrolled in this course" });
       return;
     }
@@ -112,7 +112,7 @@ router.get("/live-classes/:id", requireAuth, async (req, res) => {
   try {
     const [liveClass] = await db.select().from(liveClassesTable).where(eq(liveClassesTable.id, id));
     // Same 404 for missing and not-enrolled so students cannot probe other courses' classes
-    if (!liveClass || !(await canAccessCourse(res.locals.firebaseUser, liveClass.courseId))) {
+    if (!liveClass || !(await canAccessCourse(req.auth!, liveClass.courseId))) {
       res.status(404).json({ error: "Live class not found" });
       return;
     }

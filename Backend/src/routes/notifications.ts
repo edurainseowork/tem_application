@@ -12,7 +12,7 @@ router.use(requireAuth);
 // Get the signed-in student's notifications, newest first
 router.get("/", async (req, res) => {
   try {
-    const userId = await findDbUserId(res.locals.firebaseUser.uid);
+    const userId = await findDbUserId(req.auth!.uid);
     if (userId === null) {
       res.json({ success: true, data: [] });
       return;
@@ -48,7 +48,7 @@ router.get("/", async (req, res) => {
 // Mark all of the signed-in student's notifications as read
 router.post("/read-all", async (req, res) => {
   try {
-    const userId = await findDbUserId(res.locals.firebaseUser.uid);
+    const userId = await findDbUserId(req.auth!.uid);
     if (userId !== null) {
       await db.update(notificationsTable).set({ isRead: true }).where(eq(notificationsTable.userId, userId));
     }
@@ -68,7 +68,7 @@ router.post("/:id/read", async (req, res) => {
   }
 
   try {
-    const userId = await findDbUserId(res.locals.firebaseUser.uid);
+    const userId = await findDbUserId(req.auth!.uid);
     if (userId !== null) {
       await db.update(notificationsTable).set({ isRead: true })
         .where(and(eq(notificationsTable.id, id), eq(notificationsTable.userId, userId)));
