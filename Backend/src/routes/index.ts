@@ -8,10 +8,14 @@ import uploadRouter from "./upload.js";
 import bannersRouter from "./banners.js";
 import { authRouter } from "./auth.js";
 import statsRouter from "./stats.js";
+import liveClassesRouter from "./liveClasses.js";
+import notificationsRouter from "./notifications.js";
 
 const router = Router();
 
 router.use("/health", healthRouter);
+// Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
+router.use(liveClassesRouter);
 router.use("/courses", coursesRouter);
 router.use("/coupons", couponsRouter);
 router.use("/razorpay", razorpayRouter);
@@ -20,5 +24,6 @@ router.use("/upload", uploadRouter);
 router.use("/banners", bannersRouter);
 router.use("/auth", authRouter);
 router.use("/stats", statsRouter);
+router.use("/notifications", notificationsRouter);
 
 export default router;

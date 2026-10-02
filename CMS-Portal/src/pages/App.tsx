@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { auth } from '../firebase'
 import '../index.css'
+import GoLive from './GoLive'
+import Coupons from './Coupons'
 
 function App() {
   const [activeTab, setActiveTab] = useState('courses');
@@ -121,7 +123,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (user && (activeTab === 'courses' || activeTab === 'dashboard')) {
+    if (user && (activeTab === 'courses' || activeTab === 'dashboard' || activeTab === 'golive' || activeTab === 'coupons')) {
       fetchCourses();
       if (activeTab === 'dashboard') {
         fetchStats();
@@ -443,6 +445,9 @@ function App() {
           <div className={`nav-link ${activeTab === 'coupons' ? 'active' : ''}`} onClick={() => setActiveTab('coupons')}>
             Private/Public Coupons
           </div>
+          <div className={`nav-link ${activeTab === 'golive' ? 'active' : ''}`} onClick={() => setActiveTab('golive')}>
+            Go Live
+          </div>
         </nav>
       </aside>
 
@@ -455,6 +460,7 @@ function App() {
             {activeTab === 'content' && 'Post-Purchase Content'}
             {activeTab === 'banners' && 'Manage Homepage Banners'}
             {activeTab === 'coupons' && 'Coupon Generator'}
+            {activeTab === 'golive' && 'Go Live'}
           </h1>
           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user.email}</span>
@@ -692,29 +698,11 @@ function App() {
         )}
 
         {activeTab === 'coupons' && (
-          <div className="glass-card">
-            <h3 style={{ marginBottom: 'var(--space-md)' }}>Generate Coupons</h3>
-            <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Coupon Code</label>
-                <input type="text" placeholder="e.g. DIWALI50" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Discount Amount / %</label>
-                <input type="text" placeholder="e.g. 500" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-              </div>
-            </div>
-            
-            <div style={{ marginTop: 'var(--space-md)' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Coupon Type</label>
-              <select style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <option>Public (Visible to everyone)</option>
-                <option>Private (Hidden, applies only via link/code)</option>
-              </select>
-            </div>
+          <Coupons user={user} coursesList={coursesList} showToast={showToast} />
+        )}
 
-            <button type="button" className="btn" style={{ marginTop: 'var(--space-lg)' }}>Generate Coupon</button>
-          </div>
+        {activeTab === 'golive' && (
+          <GoLive user={user} coursesList={coursesList} showToast={showToast} />
         )}
       </main>
     </div>
