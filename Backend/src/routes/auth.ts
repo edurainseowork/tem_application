@@ -4,6 +4,7 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import fs from 'fs';
 import path from 'path';
+import { authenticateToken, extractUserRole } from '../middleware/auth';
 
 export const authRouter = Router();
 const MSG91_AUTH_KEY = '575019AGrL1JB46ab9222dP1';
@@ -16,6 +17,24 @@ if (!getApps().length) {
     credential: cert(serviceAccount),
   });
 }
+
+/**
+ * GET /api/auth/me — Return authenticated user profile and resolved RBAC role
+ */
+authRouter.get('/me', authenticateToken, async (req: Request, res: Response): Promise<any> => {
+  const role = extractUserRole(req);
+  res.json({
+    success: true,
+    user: {
+      id: req.user?.id,
+      firebaseUid: req.firebaseUid || req.auth?.uid,
+      email: req.user?.email || req.auth?.email,
+      name: req.user?.name || req.auth?.name,
+      role,
+      isAdminOrFaculty: role === 'admin' || role === 'faculty',
+    },
+  });
+});
 // Backend is fully stateless for AWS Lambda. 
 // We will send reqId to the frontend and expect it back during verification.
 

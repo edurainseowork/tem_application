@@ -1,0 +1,128 @@
+### Edurain Backend Verification Suite (PRD Section 6.3, 6.5, 11, 12)
+### Compatible with VS Code REST Client / IntelliJ HTTP Client
+
+@baseUrl = http://localhost:5000/api
+@adminToken = test-admin
+@facultyToken = test-faculty
+@studentToken = test-student
+@courseId = 10
+
+###############################################################################
+# 1. Create a Root Folder
+# POST /api/content
+# Auth: Bearer test-admin or test-faculty (Role: admin/faculty)
+###############################################################################
+# @name createFolder
+POST {{baseUrl}}/content
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "courseId": {{courseId}},
+  "title": "Unit 03: Laws of Motion",
+  "type": "folder"
+}
+
+### Store the created folder ID from the response above
+@createdFolderId = {{createFolder.response.body.data.id}}
+
+###############################################################################
+# 1b. Create Nested Content Inside the Folder
+# POST /api/content
+# Note: order is omitted to demonstrate automatic MAX(order) + 1 assignment!
+###############################################################################
+# @name createVideoItem
+POST {{baseUrl}}/content
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "courseId": {{courseId}},
+  "parentId": "{{createdFolderId}}",
+  "title": "Lecture 01: Newton's Laws & Free Body Diagrams",
+  "type": "video",
+  "mediaUrl": "https://player.vimeo.com/video/987654330"
+}
+
+###
+# @name createPdfItem
+POST {{baseUrl}}/content
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "courseId": {{courseId}},
+  "parentId": "{{createdFolderId}}",
+  "title": "Laws of Motion Revision Notes",
+  "type": "pdf",
+  "mediaUrl": "https://edurain-media-assets.s3.ap-south-1.amazonaws.com/courses/10/notes-ch3.pdf",
+  "fileSize": "3.8 MB"
+}
+
+@videoId = {{createVideoItem.response.body.data.id}}
+@pdfId = {{createPdfItem.response.body.data.id}}
+
+###############################################################################
+# 2. Request an S3 Presigned Upload URL
+# POST /api/upload
+# Generates a 15-minute PUT URL for direct S3 client upload
+###############################################################################
+# @name requestPresignedUrl
+POST {{baseUrl}}/upload
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "fileName": "friction-and-circular-motion.mp4",
+  "fileType": "video/mp4",
+  "courseId": "{{courseId}}"
+}
+
+###
+# @name requestPresignedPdfUrl
+POST {{baseUrl}}/upload
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "fileName": "chapter-3-practice-problems.pdf",
+  "fileType": "application/pdf",
+  "courseId": "{{courseId}}"
+}
+
+###############################################################################
+# 3. Reorder Content Items (Transactional Batch Update)
+# PATCH /api/content/reorder
+###############################################################################
+# @name reorderContent
+PATCH {{baseUrl}}/content/reorder
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "items": [
+    { "id": "{{pdfId}}", "order": 0 },
+    { "id": "{{videoId}}", "order": 1 }
+  ]
+}
+
+###############################################################################
+# 4. Fetch the Nested Content Tree
+# GET /api/courses/:id/content
+###############################################################################
+
+### 4a. Fetch Root Level Folders & Files (parentId omitted)
+GET {{baseUrl}}/courses/{{courseId}}/content
+Authorization: Bearer {{adminToken}}
+
+### 4b. Fetch Root Level Explicitly (parentId=null)
+GET {{baseUrl}}/courses/{{courseId}}/content?parentId=null
+Authorization: Bearer {{adminToken}}
+
+### 4c. Fetch Nested Contents Inside Created Folder
+GET {{baseUrl}}/courses/{{courseId}}/content?parentId={{createdFolderId}}
+Authorization: Bearer {{adminToken}}
+
+### 4d. Fetch Via Alternative Mount Point GET /api/content/:courseId
+GET {{baseUrl}}/content/{{courseId}}?parentId={{createdFolderId}}
+Authorization: Bearer {{adminToken}}

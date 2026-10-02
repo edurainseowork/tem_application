@@ -30,9 +30,9 @@ router.post("/", requireAdmin, async (req, res) => {
     }
 
     const newBanner = await db.insert(bannersTable).values({ imageUrl }).returning();
-    res.json({ success: true, data: newBanner[0] });
+    return res.json({ success: true, data: newBanner[0] });
   } catch (error: any) {
-    res.status(500).json({ error: "Failed to create banner" });
+    return res.status(500).json({ error: "Failed to create banner" });
   }
 });
 

@@ -23,3 +23,6 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 });
+
+export * from "./middleware/auth";
+

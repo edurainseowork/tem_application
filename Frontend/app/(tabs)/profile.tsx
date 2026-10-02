@@ -33,6 +33,30 @@ export default function ProfileScreen() {
         <View style={[styles.stat, { backgroundColor: colors.card, borderColor: colors.border }]}><Text style={[styles.statValue, { color: colors.navy }]}>3</Text><Text style={[styles.statLabel, { color: colors.inkSubtle }]}>Day streak</Text></View>
         <View style={[styles.stat, { backgroundColor: colors.card, borderColor: colors.border }]}><Text style={[styles.statValue, { color: colors.navy }]}>86%</Text><Text style={[styles.statLabel, { color: colors.inkSubtle }]}>Avg. score</Text></View>
       </View>
+
+      <View style={{ marginBottom: 20 }}>
+        <Text style={[styles.sectionTitle, { color: colors.navy }]}>Study Material</Text>
+        <Pressable
+          testID="course-study-material-card"
+          onPress={() =>
+            router.push({
+              pathname: '/course/[id]/content',
+              params: { id: '10', title: 'Class 11th PCB' },
+            } as any)
+          }
+          style={[styles.row, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
+          <View style={[styles.rowIcon, { backgroundColor: '#fef3c7' }]}>
+            <Feather name="book-open" size={19} color="#d97706" />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={[styles.rowTitle, { color: colors.navy }]}>Course Study Material</Text>
+            <Text style={[styles.rowMeta, { color: colors.inkSubtle }]}>Access Lectures, Notes & PDFs</Text>
+          </View>
+          <Feather name="chevron-right" size={17} color={colors.inkSubtle} />
+        </Pressable>
+      </View>
+
       <Text style={[styles.sectionTitle, { color: colors.navy }]}>My learning</Text>
       {purchasedCourses.length ? purchasedCourses.map((id) => {
         const course = COURSES.find((item) => item.id === id);

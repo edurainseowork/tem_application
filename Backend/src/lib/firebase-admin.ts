@@ -10,7 +10,16 @@ function loadServiceAccount(): ServiceAccount {
   if (fromEnv) {
     return JSON.parse(fromEnv) as ServiceAccount;
   }
-  const serviceAccountPath = path.resolve(process.cwd(), "firebase-service-account.json");
+  const possiblePaths = [
+    path.resolve(process.cwd(), "firebase-service-account.json"),
+    path.resolve(process.cwd(), "Backend", "firebase-service-account.json"),
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, "utf8")) as ServiceAccount;
+    }
+  }
+  const serviceAccountPath = possiblePaths[0];
   return JSON.parse(fs.readFileSync(serviceAccountPath, "utf8")) as ServiceAccount;
 }
 

@@ -9,7 +9,7 @@ export class HttpError extends Error {
 }
 
 export function parseId(raw: unknown): number {
-  const id = typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : NaN;
+  const id = typeof raw === "number" ? raw : (typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : NaN);
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new HttpError(400, "Invalid id");
   }

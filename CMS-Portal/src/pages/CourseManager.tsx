@@ -19,6 +19,7 @@ type Props = {
   courses: AdminCourse[];
   reloadCourses: () => Promise<void>;
   showToast: (message: string, type?: 'success' | 'error') => void;
+  onManageContent?: (courseId: number) => void;
 };
 
 type FormState = {
@@ -32,7 +33,7 @@ type FormState = {
 
 const emptyForm: FormState = { title: '', description: '', price: '', originalPrice: '', categoryId: '', publishNow: false };
 
-export default function CourseManager({ courses, reloadCourses, showToast }: Props) {
+export default function CourseManager({ courses, reloadCourses, showToast, onManageContent }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -220,6 +221,16 @@ export default function CourseManager({ courses, reloadCourses, showToast }: Pro
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  {onManageContent && (
+                    <button
+                      onClick={() => onManageContent(course.id)}
+                      className="btn"
+                      style={{ background: '#3b82f6', border: 'none', padding: '6px 12px', fontSize: '0.8rem' }}
+                      title="Manage curriculum, videos, PDFs and folders"
+                    >
+                      Manage Content
+                    </button>
+                  )}
                   <button onClick={() => togglePublish(course)} disabled={busyCourseId === course.id} className="btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', fontSize: '0.8rem' }}>
                     {course.isPublished ? 'Unpublish' : 'Publish'}
                   </button>

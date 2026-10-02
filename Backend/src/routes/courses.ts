@@ -5,6 +5,8 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { publicCourseColumns, withPublicThumbnail } from "../lib/course-view";
 import { publicCourseQuerySchema } from "../lib/course-schemas";
 import { HttpError, parseId } from "../lib/http-error";
+import { optionalAuth } from "../middlewares/auth";
+import { fetchCourseContentTree } from "./content.js";
 
 // Public catalog used by the mobile app. Only published courses are ever returned.
 // Admin CRUD lives in routes/admin/courses.ts.
@@ -27,6 +29,16 @@ router.get("/", async (req, res) => {
     .orderBy(asc(categoriesTable.sortOrder), desc(coursesTable.publishedAt), desc(coursesTable.id));
 
   res.json(courses.map((c) => withPublicThumbnail(c, req)));
+});
+
+// GET /api/courses/:id/content — Return items for a given course filtered optionally by parentId, sorted ascending by order
+router.get("/:id/content", optionalAuth, async (req, res) => {
+  const courseId = parseId(req.params.id);
+  const rawParentId = req.query.parentId !== undefined ? req.query.parentId : req.query.parent_id;
+  const parentId = rawParentId !== undefined && rawParentId !== null ? String(rawParentId) : undefined;
+  const items = await fetchCourseContentTree(courseId, parentId, req);
+  console.log(`[BACKEND CONTENT FETCH] Course: ${req.params.id}, ParentId: ${req.query.parentId}, Found Rows: ${items.length}`);
+  res.json({ success: true, data: items, content: items });
 });
 
 // GET /api/courses/:id
