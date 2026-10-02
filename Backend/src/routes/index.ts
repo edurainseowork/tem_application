@@ -26,7 +26,8 @@ router.use("/upload", uploadRouter);
 router.use("/banners", bannersRouter);
 router.use("/auth", authRouter);
 router.use("/stats", statsRouter);
-router.use("/live-classes", liveClassesRouter);
+// Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
+router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);
 
 export default router;
