@@ -59,6 +59,7 @@
     "@msg91comm/sendotp-react-native": "^3.0.0",
     "expo": "~57.0.25",
     "expo-asset": "~57.0.18",
+    "expo-dev-client": "~57.0.19",
     "firebase": "^12.19.0",
     "react": "19.2.3",
     "react-native": "0.86.3",

@@ -1,21 +1,9 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import fs from 'fs';
-import path from 'path';
+import { getAuth } from '../lib/firebaseAdmin.js';
 
 export const authRouter = Router();
 const MSG91_AUTH_KEY = '575019AGrL1JB46ab9222dP1';
-
-// Initialize Firebase Admin (Only once)
-if (!getApps().length) {
-  const serviceAccountPath = path.resolve(process.cwd(), 'firebase-service-account.json');
-  const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-  initializeApp({
-    credential: cert(serviceAccount),
-  });
-}
 // Backend is fully stateless for AWS Lambda. 
 // We will send reqId to the frontend and expect it back during verification.
 

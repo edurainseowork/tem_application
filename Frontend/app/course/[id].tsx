@@ -1,14 +1,18 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
 import { API_BASE_URL } from '@/api/client';
+import { fetchPublicCoupons, redeemCoupon, validateCoupon } from '@/api/coupons';
+import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
+import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
+import { useNow } from '@/hooks/useNow';
 
 export default function CourseDetailScreen() {
   const colors = useColors();
@@ -59,6 +63,11 @@ export default function CourseDetailScreen() {
   const [coupon, setCoupon] = useState('');
   const [discount, setDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
+  const [couponValid, setCouponValid] = useState(false);
+  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
+  const [publicCoupon, setPublicCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'content'>('content');
   const [courseContent, setCourseContent] = useState<any[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
@@ -79,24 +88,76 @@ export default function CourseDetailScreen() {
     }
   }, [unlocked, user?.uid, course]);
 
-  const applyCoupon = () => {
+  // Live classes are only returned by the API for students enrolled in this course
+  const [liveClasses, setLiveClasses] = useState<LiveClass[]>([]);
+  const now = useNow();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!unlocked || !user?.uid || !course) return;
+      let active = true;
+      fetchCourseLiveClasses(course.id)
+        .then((data) => { if (active) setLiveClasses(data); })
+        .catch((e) => {
+          console.warn('Live classes fetch error:', e.message);
+          if (active) setLiveClasses([]);
+        });
+      return () => { active = false; };
+    }, [unlocked, user?.uid, course]),
+  );
+
+  const visibleLiveClasses = liveClasses.filter((liveClass) => getLiveClassStatus(liveClass, now) !== 'ended');
+
+  // Suggest a public coupon that applies to this course
+  React.useEffect(() => {
+    if (!course || unlocked) return;
+    fetchPublicCoupons(course.id)
+      .then((coupons) => setPublicCoupon(coupons[0] ?? null))
+      .catch(() => setPublicCoupon(null));
+  }, [course, unlocked]);
+
+  const clearCoupon = (message: string) => {
+    setDiscount(0);
+    setAppliedCode(null);
+    setCouponValid(false);
+    setCouponMessage(message);
+  };
+
+  const applyCoupon = async () => {
     const code = coupon.trim().toUpperCase();
-    if (code === 'FESTIVE20') {
-      setDiscount(Math.round((course?.price || 0) * 0.2));
-      setCouponMessage('20% off applied');
-    } else if (code === 'STUDY100') {
-      setDiscount(100);
-      setCouponMessage('₹100 off applied');
-    } else {
-      setDiscount(0);
-      setCouponMessage('That code is not active yet.');
+    if (!course || !code) return;
+    setApplyingCoupon(true);
+    try {
+      const quote = await validateCoupon(code, course.id);
+      setDiscount(quote.discountAmount);
+      setAppliedCode(quote.code);
+      setCouponValid(true);
+      setCouponMessage(`${quote.discountPercent}% off applied`);
+    } catch (e: any) {
+      clearCoupon(e.message || 'That code is not valid.');
+    } finally {
+      setApplyingCoupon(false);
     }
   };
 
   const buyNow = async () => {
-    if (!course) return;
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await purchaseCourse(course.id.toString());
+    if (!course || purchasing) return;
+    setPurchasing(true);
+    try {
+      // Use up the coupon before unlocking; it may have run out since it was applied
+      if (appliedCode) {
+        try {
+          await redeemCoupon(appliedCode, course.id);
+        } catch (e: any) {
+          clearCoupon(`${e.message || 'This coupon can no longer be used'}. Please review the price and try again.`);
+          return;
+        }
+      }
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await purchaseCourse(course.id.toString());
+    } finally {
+      setPurchasing(false);
+    }
   };
 
   const openExternal = (url: string) => Linking.openURL(url);
@@ -151,16 +212,16 @@ export default function CourseDetailScreen() {
           {!unlocked ? (
             <>
               <View style={[styles.couponCard, { backgroundColor: colors.accent }]}>
-                <View style={styles.couponHeader}><View><Text style={[styles.cardTitle, { color: colors.navy }]}>Have a coupon?</Text><Text style={[styles.couponHint, { color: colors.inkSubtle }]}>Try FESTIVE20 for 20% off</Text></View><Feather name="tag" size={20} color={colors.coral} /></View>
+                <View style={styles.couponHeader}><View><Text style={[styles.cardTitle, { color: colors.navy }]}>Have a coupon?</Text><Text style={[styles.couponHint, { color: colors.inkSubtle }]}>{publicCoupon ? `Try ${publicCoupon.code} for ${publicCoupon.discountPercent}% off` : 'Enter your code to get a discount'}</Text></View><Feather name="tag" size={20} color={colors.coral} /></View>
                 <View style={styles.couponInputRow}>
-                  <TextInput value={coupon} onChangeText={setCoupon} placeholder="Enter code" placeholderTextColor={colors.inkSubtle} autoCapitalize="characters" style={[styles.couponInput, { color: colors.navy, borderColor: colors.input, backgroundColor: colors.card }]} />
-                  <Pressable onPress={applyCoupon} style={[styles.applyButton, { backgroundColor: colors.navy }]}><Text style={[styles.applyText, { color: colors.primaryForeground }]}>Apply</Text></Pressable>
+                  <TextInput value={coupon} onChangeText={(text) => { setCoupon(text); if (appliedCode) clearCoupon(''); }} placeholder="Enter code" placeholderTextColor={colors.inkSubtle} autoCapitalize="characters" style={[styles.couponInput, { color: colors.navy, borderColor: colors.input, backgroundColor: colors.card }]} />
+                  <Pressable onPress={applyCoupon} disabled={applyingCoupon} style={[styles.applyButton, { backgroundColor: colors.navy, opacity: applyingCoupon ? 0.7 : 1 }]}><Text style={[styles.applyText, { color: colors.primaryForeground }]}>{applyingCoupon ? '...' : 'Apply'}</Text></Pressable>
                 </View>
-                {couponMessage ? <Text style={[styles.couponMessage, { color: couponMessage.includes('applied') ? colors.success : colors.destructive }]}>{couponMessage}</Text> : null}
+                {couponMessage ? <Text style={[styles.couponMessage, { color: couponValid ? colors.success : colors.destructive }]}>{couponMessage}</Text> : null}
               </View>
               <View style={styles.checkoutRow}>
                 <View><Text style={[styles.totalLabel, { color: colors.inkSubtle }]}>TOTAL TODAY</Text><Text style={[styles.totalPrice, { color: colors.navy }]}>{formatPrice(course.price - discount)} <Text style={[styles.originalPrice, { color: colors.inkSubtle }]}>{formatPrice(course.originalPrice)}</Text></Text></View>
-                <Pressable testID="buy-now-button" onPress={buyNow} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>Buy now</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
+                <Pressable testID="buy-now-button" onPress={buyNow} disabled={purchasing} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed || purchasing ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>Buy now</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
               </View>
               <View style={styles.lockedNote}><Feather name="lock" size={13} color={colors.inkSubtle} /><Text style={[styles.lockedText, { color: colors.inkSubtle }]}>Notes, live classes, replays & tests unlock instantly.</Text></View>
             </>
@@ -171,6 +232,15 @@ export default function CourseDetailScreen() {
                 <View style={{ flex: 1 }}><Text style={[styles.unlockedIntroTitle, { color: colors.primaryForeground }]}>You’re all set.</Text><Text style={[styles.unlockedIntroText, { color: '#bdc8df' }]}>Access your course materials below.</Text></View>
                 <Feather name="star" size={20} color={colors.gold} />
               </View>
+
+              {visibleLiveClasses.length > 0 && (
+                <View style={{ marginBottom: 4 }}>
+                  <Text style={[styles.cardTitle, { color: colors.navy, marginBottom: 10 }]}>Live Classes</Text>
+                  {visibleLiveClasses.map((liveClass) => (
+                    <LiveClassCard key={liveClass.id} liveClass={liveClass} now={now} />
+                  ))}
+                </View>
+              )}
               
               <View style={[styles.contentPanel, { backgroundColor: colors.card, borderColor: colors.border, padding: 12 }]}>
                 {loadingContent ? (
