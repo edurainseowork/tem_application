@@ -194,7 +194,7 @@ router.post("/redeem", requireAuth, async (req, res) => {
       return;
     }
 
-    const coupon = await db.transaction((tx) => redeemCoupon(tx, result.coupon.id, { courseId, firebaseUid: res.locals.firebaseUser.uid }));
+    const coupon = await db.transaction((tx) => redeemCoupon(tx, result.coupon.id, { courseId, firebaseUid: req.auth!.uid }));
     res.json({ success: true, code: result.coupon.code, discountPercent: result.coupon.discountPercent, ...calculateDiscount(course.price, result.coupon.discountPercent), couponActive: coupon?.isActive ?? false });
   } catch (error) {
     if (error instanceof CouponExhaustedError) {
