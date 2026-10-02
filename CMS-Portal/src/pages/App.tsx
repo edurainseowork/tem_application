@@ -382,11 +382,11 @@ function App() {
         )}
 
         {activeTab === 'coupons' && (
-          <Coupons user={user} coursesList={coursesList} showToast={showToast} />
+          <Coupons user={user!} coursesList={coursesList} showToast={showToast} />
         )}
 
         {activeTab === 'golive' && (
-          <GoLive user={user} coursesList={coursesList} showToast={showToast} />
+          <GoLive user={user!} coursesList={coursesList} showToast={showToast} />
         )}
       </main>
     </div>
