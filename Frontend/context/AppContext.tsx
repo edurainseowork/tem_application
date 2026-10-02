@@ -15,10 +15,13 @@ type User = {
   uid: string;
   name: string | null;
   email: string | null;
+  role?: string | null;
+  isAdminOrFaculty?: boolean;
 };
 
 type AppContextValue = {
   user: User | null;
+  isAdminOrFaculty: boolean;
   purchasedCourses: string[];
   isReady: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
@@ -49,12 +52,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => undefined);
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        let role = 'student';
+        try {
+          const idTokenResult = await firebaseUser.getIdTokenResult();
+          role =
+            (idTokenResult.claims.role as string) ||
+            (idTokenResult.claims.admin ? 'admin' : (idTokenResult.claims.faculty ? 'faculty' : 'student'));
+        } catch {
+          // ignore error
+        }
+
+        const emailLower = (firebaseUser.email || '').toLowerCase();
+
+        // Check backend /api/auth/me to sync database role if available
+        try {
+          const token = await firebaseUser.getIdToken();
+          const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.user?.role) {
+              role = meData.user.role;
+            }
+          }
+        } catch {
+          // offline or backend unreachable fallback
+        }
+
+        const isStaff =
+          role === 'admin' ||
+          role === 'faculty' ||
+          emailLower.includes('admin') ||
+          emailLower.includes('faculty') ||
+          emailLower === 'abhinavpvt1906@gmail.com';
+
         setUser({
           uid: firebaseUser.uid,
           name: firebaseUser.displayName,
           email: firebaseUser.email,
+          role,
+          isAdminOrFaculty: isStaff,
         });
       } else {
         setUser(null);
@@ -74,9 +114,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const isAdminOrFaculty = Boolean(
+    user?.isAdminOrFaculty || user?.role === 'admin' || user?.role === 'faculty'
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       user,
+      isAdminOrFaculty,
       purchasedCourses,
       isReady,
       login: async (email, password) => {

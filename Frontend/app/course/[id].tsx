@@ -51,7 +51,7 @@ export default function CourseDetailScreen() {
   const [activeTab, setActiveTab] = useState<'content'>('content');
   const [courseContent, setCourseContent] = useState<CourseContentItem[]>([]);
   const [contentError, setContentError] = useState('');
-  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [currentFolderId, setCurrentFolderId] = useState<string | number | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
 
   React.useEffect(() => {
@@ -60,7 +60,14 @@ export default function CourseDetailScreen() {
       setContentError('');
       // Access is checked server-side against the signed-in user's purchases.
       fetchCourseContent(course.id)
-        .then(setCourseContent)
+        .then((res: any) => {
+          const dataArray = Array.isArray(res?.data)
+            ? res.data
+            : Array.isArray(res)
+            ? res
+            : (res?.data?.data || res?.data?.content || res?.content || []);
+          setCourseContent(Array.isArray(dataArray) ? dataArray : []);
+        })
         .catch(e => {
           setCourseContent([]);
           setContentError(
@@ -185,30 +192,110 @@ export default function CourseDetailScreen() {
                           </Text>
                         </>
                       )}
+                      <Pressable
+                        onPress={() =>
+                          router.push({
+                            pathname: '/course/[id]/content',
+                            params: { id: String(course.id), title: course.title },
+                          } as any)
+                        }
+                        style={{
+                          marginLeft: 'auto',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          backgroundColor: colors.coral,
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 7,
+                        }}
+                      >
+                        <Feather name="book-open" size={13} color="#ffffff" />
+                        <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#ffffff' }}>
+                          Open Curriculum
+                        </Text>
+                      </Pressable>
                     </View>
 
-                    {courseContent.filter(c => c.parentId === currentFolderId).length === 0 ? (
-                      <Text style={{ color: colors.inkSubtle, padding: 10, textAlign: 'center' }}>This folder is empty.</Text>
+                    {courseContent.filter((c) => {
+                      if (currentFolderId === null) {
+                        return c.parentId === null || !c.parentId || c.parentId === 'null' || c.parentId === 'undefined';
+                      }
+                      return String(c.parentId) === String(currentFolderId);
+                    }).length === 0 ? (
+                      <Text style={{ color: colors.inkSubtle, padding: 10, textAlign: 'center' }}>
+                        This folder is empty.
+                      </Text>
                     ) : (
-                      courseContent.filter(c => c.parentId === currentFolderId).map(item => (
-                        <Pressable 
-                          key={item.id} 
-                          onPress={() => {
-                            if (item.type === 'folder') setCurrentFolderId(item.id);
-                            else if (item.url) openExternal(item.url);
-                          }}
-                          style={styles.contentRow}
-                        >
-                          <View style={[styles.contentIcon, { backgroundColor: item.type === 'folder' ? colors.mint : item.type === 'pdf' ? colors.sky : colors.accent }]}>
-                            <Feather name={item.type === 'folder' ? 'folder' : item.type === 'pdf' ? 'file-text' : 'play'} size={18} color={item.type === 'folder' ? colors.teal : item.type === 'pdf' ? colors.lavender : colors.coral} />
-                          </View>
-                          <View style={styles.contentRowBody}>
-                            <Text style={[styles.contentTitle, { color: colors.navy }]}>{item.title}</Text>
-                            <Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>{item.type.toUpperCase()}</Text>
-                          </View>
-                          <Feather name={item.type === 'folder' ? 'chevron-right' : 'external-link'} size={17} color={colors.inkSubtle} />
-                        </Pressable>
-                      ))
+                      courseContent
+                        .filter((c) => {
+                          if (currentFolderId === null) {
+                            return c.parentId === null || !c.parentId || c.parentId === 'null' || c.parentId === 'undefined';
+                          }
+                          return String(c.parentId) === String(currentFolderId);
+                        })
+                        .map((item) => (
+                          <Pressable
+                            key={item.id}
+                            onPress={() => {
+                              if (item.type === 'folder') {
+                                setCurrentFolderId(item.id);
+                              } else {
+                                // Open in-app student content viewer (sandboxed PDF reader / protected player)
+                                router.push({
+                                  pathname: '/course/[id]/content',
+                                  params: { id: String(course.id), title: course.title },
+                                } as any);
+                              }
+                            }}
+                            style={styles.contentRow}
+                          >
+                            <View
+                              style={[
+                                styles.contentIcon,
+                                {
+                                  backgroundColor:
+                                    item.type === 'folder'
+                                      ? colors.mint
+                                      : item.type === 'pdf'
+                                      ? colors.sky
+                                      : colors.accent,
+                                },
+                              ]}
+                            >
+                              <Feather
+                                name={
+                                  item.type === 'folder'
+                                    ? 'folder'
+                                    : item.type === 'pdf'
+                                    ? 'file-text'
+                                    : 'play'
+                                }
+                                size={18}
+                                color={
+                                  item.type === 'folder'
+                                    ? colors.teal
+                                    : item.type === 'pdf'
+                                    ? colors.lavender
+                                    : colors.coral
+                                }
+                              />
+                            </View>
+                            <View style={styles.contentRowBody}>
+                              <Text style={[styles.contentTitle, { color: colors.navy }]}>
+                                {item.title}
+                              </Text>
+                              <Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>
+                                {item.type.toUpperCase()}
+                              </Text>
+                            </View>
+                            <Feather
+                              name={item.type === 'folder' ? 'chevron-right' : 'arrow-up-right'}
+                              size={17}
+                              color={colors.inkSubtle}
+                            />
+                          </Pressable>
+                        ))
                     )}
                   </>
                 )}

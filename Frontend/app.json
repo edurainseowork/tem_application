@@ -9,16 +9,31 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.edurain.app"
+      "bundleIdentifier": "com.edurain.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow EDURAIN to access your files and documents for course content uploads."
+      }
     },
     "android": {
-      "package": "com.edurain.app"
+      "package": "com.edurain.app",
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/edurain-logo.jpg"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

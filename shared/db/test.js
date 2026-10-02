@@ -4,7 +4,7 @@ const client = new Client({
   connectionString: "postgresql://postgres:Aryan1400@database-2.cluster-cpm4oeo2cf6s.ap-south-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify",
 });
 client.connect()
-  .then(() => {
+  .then(async () => {
     console.log("Connected successfully");
     client.end();
   })

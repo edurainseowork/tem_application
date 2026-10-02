@@ -4,6 +4,8 @@ import { auth } from '../firebase'
 import { apiFetch, uploadFile, API_BASE_URL, type AdminCourse } from '../api'
 import CourseManager from './CourseManager'
 import CategoryManager from './CategoryManager'
+import CourseContentManager from './CourseContentManager'
+import RoleGuard from '../components/RoleGuard'
 import '../index.css'
 
 function App() {
@@ -11,7 +13,6 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [activeStudents, setActiveStudents] = useState(0);
@@ -28,14 +29,6 @@ function App() {
 
   // Upload Content State
   const [selectedCourseForContent, setSelectedCourseForContent] = useState('');
-  const [courseContentList, setCourseContentList] = useState<any[]>([]);
-  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
-
-  const [contentType, setContentType] = useState('Folder');
-  const [contentTitle, setContentTitle] = useState('');
-  const [contentFile, setContentFile] = useState<File | null>(null);
-  const [contentUrl, setContentUrl] = useState('');
-  const [isUploadingContent, setIsUploadingContent] = useState(false);
 
   // Banners State
   const [bannersList, setBannersList] = useState<any[]>([]);
@@ -53,54 +46,11 @@ function App() {
     }
   };
 
-  const fetchCourseContent = async (courseId: string) => {
-    try {
-      const data = await apiFetch(`/content/${courseId}`);
-      if (data.success) {
-        setCourseContentList(data.data);
-      }
-    } catch (e) {
-      console.error("Failed to fetch content", e);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedCourseForContent) {
-      fetchCourseContent(selectedCourseForContent);
-      setCurrentFolderId(null);
-    } else {
-      setCourseContentList([]);
-      setCurrentFolderId(null);
-    }
-  }, [selectedCourseForContent]);
-
   // Admin access is decided by the `admin` custom claim set server-side
   // (Backend/tools/set-admin.mjs). The backend re-checks it on every request.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        const token = await currentUser.getIdTokenResult(true).catch(() => null);
-        if (!token) {
-          await signOut(auth);
-          setUser(null);
-          setLoginError('Could not verify your session with Firebase. Check your internet connection and try again.');
-          setLoading(false);
-          return;
-        }
-        if (token.claims.admin !== true) {
-          await signOut(auth);
-          setUser(null);
-          setLoginError(
-            `Password is correct, but ${currentUser.email} is not a CMS admin yet. ` +
-            `Run in Backend/:  node tools/set-admin.mjs grant ${currentUser.email}  — then log in again.`
-          );
-          setLoading(false);
-          return;
-        }
-        setLoginError('');
-      }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -159,72 +109,7 @@ function App() {
     }
   };
 
-  const handleUploadContent = async () => {
-    if (!selectedCourseForContent) {
-      showToast("Please select a target course first", "error");
-      return;
-    }
-    if (!contentTitle) {
-      showToast("Please enter a title for the content", "error");
-      return;
-    }
-    if (contentType === 'PDF' && !contentFile) {
-      showToast("Please select a PDF file", "error");
-      return;
-    }
-    if (contentType === 'Video' && !contentUrl) {
-      showToast("Please enter a Vimeo URL", "error");
-      return;
-    }
 
-    setIsUploadingContent(true);
-    try {
-      let finalContentUrl = contentUrl;
-      
-      if (contentType === 'PDF' && contentFile) {
-        finalContentUrl = await uploadFile(contentFile);
-      }
-
-      const data = await apiFetch(`/content/${selectedCourseForContent}`, {
-        method: 'POST',
-        body: {
-          parentId: currentFolderId,
-          type: contentType.toLowerCase(), // 'folder', 'pdf', 'video'
-          title: contentTitle,
-          url: contentType === 'Folder' ? null : finalContentUrl
-        }
-      });
-      
-      if (data.success) {
-        showToast(`${contentType} "${contentTitle}" added successfully!`, "success");
-        setContentTitle('');
-        setContentFile(null);
-        setContentUrl('');
-        fetchCourseContent(selectedCourseForContent);
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (e: any) {
-      showToast("Upload Error: " + e.message, "error");
-    } finally {
-      setIsUploadingContent(false);
-    }
-  };
-
-  const handleDeleteContent = async (id: number) => {
-    if (!window.confirm("Are you sure you want to delete this item?")) return;
-    try {
-      const data = await apiFetch(`/content/${id}`, { method: 'DELETE' });
-      if (data.success) {
-        showToast("Item deleted", "success");
-        fetchCourseContent(selectedCourseForContent);
-      } else {
-        showToast(data.error, "error");
-      }
-    } catch (e: any) {
-      showToast("Error: " + e.message, "error");
-    }
-  };
 
   const handleUploadBanner = async () => {
     if (!bannerFile) {
@@ -271,49 +156,44 @@ function App() {
     }
   };
 
-  if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'white' }}>Loading...</div>;
-  }
-
-  if (!user) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-primary)' }}>
-        <form onSubmit={handleLogin} className="glass-card" style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div style={{ textAlign: 'center', marginBottom: 'var(--space-md)' }}>
-            <h2 style={{ color: 'white', marginBottom: '8px' }}>Admin CMS Login</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Enter your Firebase credentials</p>
-          </div>
-          <input 
-            type="email" 
-            placeholder="Admin Email" 
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input-field" 
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} 
-            required 
-          />
-          <input 
-            type="password" 
-            placeholder="Password" 
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="input-field" 
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} 
-            required 
-          />
-          {loginError && (
-            <p role="alert" style={{ color: '#ff8a8a', fontSize: '0.85rem', lineHeight: 1.5, background: 'rgba(255,94,94,0.1)', border: '1px solid rgba(255,94,94,0.3)', borderRadius: '8px', padding: '10px 12px', wordBreak: 'break-word' }}>
-              {loginError}
-            </p>
-          )}
-          <button type="submit" disabled={isLoggingIn} className="btn" style={{ width: '100%', marginTop: 'var(--space-sm)' }}>{isLoggingIn ? 'Logging in...' : 'Login'}</button>
-        </form>
-      </div>
-    );
-  }
+  const loginForm = (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-primary)' }}>
+      <form onSubmit={handleLogin} className="glass-card" style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+        <div style={{ textAlign: 'center', marginBottom: 'var(--space-md)' }}>
+          <h2 style={{ color: 'white', marginBottom: '8px' }}>Admin & Faculty CMS Login</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Enter your Firebase credentials</p>
+        </div>
+        <input 
+          type="email" 
+          placeholder="Admin Email" 
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="input-field" 
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} 
+          required 
+        />
+        <input 
+          type="password" 
+          placeholder="Password" 
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="input-field" 
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} 
+          required 
+        />
+        {loginError && (
+          <p role="alert" style={{ color: '#ff8a8a', fontSize: '0.85rem', lineHeight: 1.5, background: 'rgba(255,94,94,0.1)', border: '1px solid rgba(255,94,94,0.3)', borderRadius: '8px', padding: '10px 12px', wordBreak: 'break-word' }}>
+            {loginError}
+          </p>
+        )}
+        <button type="submit" disabled={isLoggingIn} className="btn" style={{ width: '100%', marginTop: 'var(--space-sm)' }}>{isLoggingIn ? 'Logging in...' : 'Login'}</button>
+      </form>
+    </div>
+  );
 
   return (
-    <div className="layout">
+    <RoleGuard allowedRoles={['admin', 'faculty']} fallbackLogin={loginForm}>
+      <div className="layout">
       {/* Toast Notification */}
       {toast && (
         <div style={{
@@ -380,7 +260,7 @@ function App() {
             {activeTab === 'coupons' && 'Coupon Generator'}
           </h1>
           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user.email}</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</span>
             <button onClick={() => signOut(auth)} className="btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px' }}>Logout</button>
           </div>
         </header>
@@ -409,7 +289,15 @@ function App() {
         )}
 
         {activeTab === 'courses' && (
-          <CourseManager courses={coursesList} reloadCourses={fetchCourses} showToast={showToast} />
+          <CourseManager
+            courses={coursesList}
+            reloadCourses={fetchCourses}
+            showToast={showToast}
+            onManageContent={(courseId) => {
+              setSelectedCourseForContent(String(courseId));
+              setActiveTab('content');
+            }}
+          />
         )}
 
         {activeTab === 'categories' && (
@@ -418,81 +306,12 @@ function App() {
 
         {activeTab === 'content' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-            <div className="glass-card">
-              <h3 style={{ marginBottom: 'var(--space-md)' }}>Manage Post-Purchase Content</h3>
-              <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
-                <select value={selectedCourseForContent} onChange={e => setSelectedCourseForContent(e.target.value)} style={{ flex: 1, padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <option value="">Select Target Course</option>
-                  {coursesList.map(course => (
-                    <option key={course.id} value={course.id}>{course.title}{course.isPublished ? '' : ' (draft)'}</option>
-                  ))}
-                </select>
-              </div>
-              
-              {selectedCourseForContent && (
-                <>
-                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '16px', marginBottom: 'var(--space-lg)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      <span style={{ cursor: 'pointer', color: currentFolderId === null ? 'white' : 'var(--accent-primary)' }} onClick={() => setCurrentFolderId(null)}>Root</span>
-                      {currentFolderId && (
-                        <>
-                          <span>/</span>
-                          <span style={{ color: 'white' }}>{courseContentList.find(c => c.id === currentFolderId)?.title || 'Folder'}</span>
-                        </>
-                      )}
-                    </div>
-                    
-                    {courseContentList.filter(c => c.parentId === currentFolderId).length === 0 ? (
-                      <p style={{ color: 'var(--text-secondary)', textAlign: 'center', margin: '20px 0' }}>This folder is empty.</p>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {courseContentList.filter(c => c.parentId === currentFolderId).map(item => (
-                          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: item.type === 'folder' ? 'pointer' : 'default' }} onClick={() => item.type === 'folder' && setCurrentFolderId(item.id)}>
-                              {item.type === 'folder' && <span style={{ fontSize: '1.2rem' }}>📁</span>}
-                              {item.type === 'pdf' && <span style={{ fontSize: '1.2rem' }}>📄</span>}
-                              {item.type === 'video' && <span style={{ fontSize: '1.2rem' }}>🎥</span>}
-                              <span style={{ color: item.type === 'folder' ? 'var(--accent-primary)' : 'white', fontWeight: item.type === 'folder' ? 'bold' : 'normal' }}>{item.title}</span>
-                            </div>
-                            <button onClick={() => handleDeleteContent(item.id)} style={{ background: 'transparent', border: 'none', color: '#ff5e5e', cursor: 'pointer' }}>Delete</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 'var(--space-md)' }}>
-                    <h4 style={{ marginBottom: 'var(--space-md)' }}>Add Item Here</h4>
-                    <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
-                      <select value={contentType} onChange={e => setContentType(e.target.value)} style={{ padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <option value="Folder">Folder</option>
-                        <option value="PDF">Class Notes (PDF)</option>
-                        <option value="Video">Recorded Lecture (Vimeo Link)</option>
-                      </select>
-                      <input type="text" value={contentTitle} onChange={e => setContentTitle(e.target.value)} placeholder="Item Title..." style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                    </div>
-
-                    {contentType === 'PDF' && (
-                      <div style={{ border: '2px dashed rgba(255,255,255,0.2)', padding: 'var(--space-xl)', textAlign: 'center', borderRadius: 'var(--radius-md)' }}>
-                        <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>Select PDF File</p>
-                        <input type="file" accept="application/pdf" onChange={e => setContentFile(e.target.files?.[0] || null)} style={{ width: '100%', padding: '9px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', cursor: 'pointer' }} />
-                      </div>
-                    )}
-
-                    {contentType === 'Video' && (
-                      <div style={{ marginTop: 'var(--space-md)' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Vimeo URL</label>
-                        <input type="text" value={contentUrl} onChange={e => setContentUrl(e.target.value)} placeholder="https://vimeo.com/..." style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                      </div>
-                    )}
-
-                    <button type="button" onClick={handleUploadContent} disabled={isUploadingContent} className="btn" style={{ marginTop: 'var(--space-md)' }}>
-                      {isUploadingContent ? 'Saving...' : `Create ${contentType}`}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <CourseContentManager
+              courses={coursesList}
+              selectedCourseId={selectedCourseForContent}
+              onSelectCourse={setSelectedCourseForContent}
+              showToast={showToast}
+            />
 
             <div className="glass-card">
               <h3 style={{ marginBottom: 'var(--space-md)' }}>Create Weekly Test / Quiz</h3>
@@ -583,6 +402,7 @@ function App() {
         )}
       </main>
     </div>
+  </RoleGuard>
   )
 }
 

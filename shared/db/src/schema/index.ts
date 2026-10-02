@@ -1,4 +1,5 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, index, pgEnum, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -7,6 +8,7 @@ export const usersTable = pgTable("users", {
   firebaseUid: text("firebase_uid").notNull().unique(),
   email: text("email").notNull(),
   name: text("name"),
+  role: varchar("role", { length: 50 }).default("student"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -39,15 +41,30 @@ export const coursesTable = pgTable("courses", {
   index("courses_is_published_idx").on(table.isPublished),
 ]);
 
+export const courseContentTypeEnum = pgEnum("course_content_type", [
+  "folder",
+  "video",
+  "pdf",
+  "note",
+  "quiz",
+]);
+
 export const courseContentTable = pgTable("course_content", {
-  id: serial("id").primaryKey(),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`).$defaultFn(() => crypto.randomUUID()),
   courseId: integer("course_id").references(() => coursesTable.id, { onDelete: 'cascade' }).notNull(),
-  parentId: integer("parent_id"), // null = root level of course
-  type: text("type").notNull(), // 'folder', 'pdf', 'video'
+  parentId: text("parent_id"), // null = root level of course; self-referencing foreign key
   title: text("title").notNull(),
-  url: text("url"), // file path or Vimeo URL
+  type: courseContentTypeEnum("type").notNull(),
+  mediaUrl: text("media_url"), // URL or file path
+  fileSize: varchar("file_size", { length: 50 }),
+  order: integer("order").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("course_content_course_id_idx").on(table.courseId),
+  index("course_content_parent_id_idx").on(table.parentId),
+  index("course_content_order_idx").on(table.order),
+]);
 
 export const couponsTable = pgTable("coupons", {
   id: serial("id").primaryKey(),
@@ -81,3 +98,8 @@ export type InsertCourse = z.infer<typeof insertCourseSchema>;
 export type Course = typeof coursesTable.$inferSelect;
 
 export type Category = typeof categoriesTable.$inferSelect;
+
+export const insertCourseContentSchema = createInsertSchema(courseContentTable);
+export type InsertCourseContent = z.infer<typeof insertCourseContentSchema>;
+export type CourseContent = typeof courseContentTable.$inferSelect;
+export type CourseContentType = (typeof courseContentTypeEnum.enumValues)[number];

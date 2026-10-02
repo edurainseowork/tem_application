@@ -32,12 +32,17 @@ export interface Category {
 }
 
 export interface CourseContentItem {
-  id: number;
-  courseId: number;
-  parentId: number | null;
-  type: 'folder' | 'pdf' | 'video';
+  id: string | number;
+  courseId: string | number;
+  parentId: string | number | null;
+  type: 'folder' | 'pdf' | 'video' | 'note' | string;
   title: string;
   url: string | null;
+  media_url?: string | null;
+  mediaUrl?: string | null;
+  file_size?: string | null;
+  fileSize?: string | null;
+  order?: number;
 }
 
 export class ApiError extends Error {
@@ -96,7 +101,19 @@ export const fetchCategories = async (): Promise<Category[]> => {
 };
 
 /** Purchased content. Throws ApiError 401/403 if the user is not signed in or has not bought the course. */
-export const fetchCourseContent = async (courseId: number): Promise<CourseContentItem[]> => {
-  const res = await apiGet<{ data: CourseContentItem[] }>(`/content/${courseId}`, { authenticated: true });
-  return res.data;
+export const fetchCourseContent = async (courseId: number | string): Promise<CourseContentItem[]> => {
+  try {
+    const res: any = await apiGet<any>(`/courses/${courseId}/content`, { authenticated: true }).catch(async () => {
+      return await apiGet<any>(`/content/${courseId}`, { authenticated: true });
+    });
+    const dataArray = Array.isArray(res?.data)
+      ? res.data
+      : Array.isArray(res)
+      ? res
+      : (res?.data?.data || res?.data?.content || res?.content || []);
+    return Array.isArray(dataArray) ? dataArray : [];
+  } catch (error) {
+    console.error("Failed to fetch course content:", error);
+    return [];
+  }
 };
