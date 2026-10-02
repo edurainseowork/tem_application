@@ -1,9 +1,10 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CATEGORIES, type Category as CategoryStyle } from '@/constants/data';
+import { fetchNotifications } from '@/api/liveClasses';
 import { API_BASE_URL, fetchCategories } from '@/api/client';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
@@ -20,6 +21,16 @@ export default function HomeScreen() {
   const [loading, setLoading] = React.useState(true);
   // Category cards come from the CMS; icons/tones cycle through the built-in styles.
   const [categoryCards, setCategoryCards] = React.useState<{ id: string; label: string; icon: CategoryStyle['icon']; tone: CategoryStyle['tone'] }[]>([]);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!user) return;
+      fetchNotifications()
+        .then((data) => setUnreadCount(data.filter((notification) => !notification.isRead).length))
+        .catch((e) => console.warn('Notifications fetch error:', e.message));
+    }, [user]),
+  );
 
   React.useEffect(() => {
     const palette = CATEGORIES.filter((c) => c.id !== 'all');
@@ -66,9 +77,19 @@ export default function HomeScreen() {
           <Text style={[styles.eyebrow, { color: colors.inkSubtle }]}>SUNDAY, 27 SEPTEMBER</Text>
           <Text style={[styles.greeting, { color: colors.navy }]}>Hello, {firstName}</Text>
         </View>
-        <Pressable style={[styles.avatar, { backgroundColor: colors.navy }]} onPress={() => router.push('/(tabs)/profile')}>
-          <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{firstName.slice(0, 1).toUpperCase()}</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable testID="notifications-bell" style={[styles.bell, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => router.push('/notifications')}>
+            <Feather name="bell" size={19} color={colors.navy} />
+            {unreadCount > 0 && (
+              <View style={[styles.bellBadge, { backgroundColor: colors.coral, borderColor: colors.background }]}>
+                <Text style={[styles.bellBadgeText, { color: colors.primaryForeground }]}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          <Pressable style={[styles.avatar, { backgroundColor: colors.navy }]} onPress={() => router.push('/(tabs)/profile')}>
+            <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{firstName.slice(0, 1).toUpperCase()}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Banner Carousel */}
@@ -124,6 +145,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
   eyebrow: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1.1, marginBottom: 7 },
   greeting: { fontFamily: 'Inter_700Bold', fontSize: 27, letterSpacing: -0.8 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bell: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  bellBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
+  bellBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 9 },
   avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 17 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },

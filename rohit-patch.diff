@@ -1,0 +1,398 @@
+﻿diff --git a/.gitignore b/.gitignore
+index 33d1b83..b94586c 100644
+Binary files a/.gitignore and b/.gitignore differ
+diff --git a/.npmrc b/.npmrc
+index 61e34c2..e6a8e14 100644
+--- a/.npmrc
++++ b/.npmrc
+@@ -1,2 +1,4 @@
+-auto-install-peers=false
++node-linker=hoisted
++shamefully-hoist=true
++auto-install-peers=true
+ strict-peer-dependencies=false
+diff --git a/Backend/src/routes/auth.ts b/Backend/src/routes/auth.ts
+index d2babc8..97f50a0 100644
+--- a/Backend/src/routes/auth.ts
++++ b/Backend/src/routes/auth.ts
+@@ -1,21 +1,9 @@
+ import { Router, Request, Response } from 'express';
+ import axios from 'axios';
+-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+-import { getAuth } from 'firebase-admin/auth';
+-import fs from 'fs';
+-import path from 'path';
++import { getAuth } from '../lib/firebaseAdmin.js';
+ 
+ export const authRouter = Router();
+ const MSG91_AUTH_KEY = '575019AGrL1JB46ab9222dP1';
+-
+-// Initialize Firebase Admin (Only once)
+-if (!getApps().length) {
+-  const serviceAccountPath = path.resolve(process.cwd(), 'firebase-service-account.json');
+-  const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+-  initializeApp({
+-    credential: cert(serviceAccount),
+-  });
+-}
+ // Backend is fully stateless for AWS Lambda. 
+ // We will send reqId to the frontend and expect it back during verification.
+ 
+@@ -164,4 +152,4 @@ authRouter.post('/send-password-reset', async (req: Request, res: Response): Pro
+     console.error('Error sending reset email:', error?.response?.data || error.message);
+     res.status(500).json({ error: 'Failed to send reset link via email' });
+   }
+-});
++});
+\ No newline at end of file
+diff --git a/Backend/src/routes/razorpay.ts b/Backend/src/routes/razorpay.ts
+index 3668b17..407812a 100644
+--- a/Backend/src/routes/razorpay.ts
++++ b/Backend/src/routes/razorpay.ts
+@@ -4,6 +4,7 @@ import crypto from "crypto";
+ import { db } from "@workspace/db";
+ import { userCoursesTable, coursesTable, usersTable } from "@workspace/db/schema";
+ import { eq, and } from "drizzle-orm";
++import { calculateDiscount, checkCoupon, redeemCoupon } from "./coupons.js";
+ 
+ const router = Router();
+ 
+@@ -16,14 +17,28 @@ const razorpay = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+   : null;
+ 
+ router.post("/order", async (req, res) => {
+-  const { courseId, finalPrice } = req.body;
++  const { courseId, finalPrice, couponCode } = req.body;
+   if (!razorpay) return res.status(500).json({ error: "Razorpay not configured" });
+ 
+   try {
++    let amount = finalPrice;
++    const notes: Record<string, string> = { courseId: String(courseId) };
++
++    // With a coupon the amount is computed here from the course price, never trusted from the client
++    if (couponCode) {
++      const [course] = await db.select({ price: coursesTable.price }).from(coursesTable).where(eq(coursesTable.id, Number(courseId)));
++      if (!course) return res.status(404).json({ error: "Course not found" });
++      const result = await checkCoupon(String(couponCode), Number(courseId));
++      if (!result.ok) return res.status(result.status).json({ error: result.error });
++      amount = calculateDiscount(course.price, result.coupon.discountPercent).finalPrice;
++      notes.couponId = String(result.coupon.id);
++    }
++
+     const options = {
+-      amount: finalPrice, // in paise
++      amount, // in paise
+       currency: "INR",
+       receipt: `receipt_course_${courseId}`,
++      notes,
+     };
+     
+     const order = await razorpay.orders.create(options);
+@@ -58,6 +73,14 @@ router.post("/verify", async (req, res) => {
+           razorpayPaymentId: razorpay_payment_id,
+         });
+       }
++
++      // Count the coupon use against the paid order. The limit was checked when the order was created;
++      // a payment that completes after another student used the last slot is still honoured.
++      const order = await razorpay?.orders.fetch(razorpay_order_id);
++      const couponId = Number(order?.notes?.couponId);
++      if (couponId) {
++        await db.transaction((tx) => redeemCoupon(tx, couponId, { courseId: Number(courseId), firebaseUid, razorpayOrderId: razorpay_order_id }, { enforceLimit: false }));
++      }
+       res.json({ success: true, message: "Payment verified successfully" });
+       return;
+     } else {
+diff --git a/CMS-Portal/src/firebase.ts b/CMS-Portal/src/firebase.ts
+index cea2309..fa1db84 100644
+--- a/CMS-Portal/src/firebase.ts
++++ b/CMS-Portal/src/firebase.ts
+@@ -1,4 +1,4 @@
+-import { initializeApp } from 'firebase/app';
++import { initializeApp, getApps, getApp } from 'firebase/app';
+ import { getAuth } from 'firebase/auth';
+ 
+ const firebaseConfig = {
+@@ -10,5 +10,5 @@ const firebaseConfig = {
+   appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:5660601224:web:e12194bc33e38cd1e8e83d",
+ };
+ 
+-const app = initializeApp(firebaseConfig);
++const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+ export const auth = getAuth(app);
+diff --git a/Frontend/app/(tabs)/home.tsx b/Frontend/app/(tabs)/home.tsx
+index 99de640..74b4e94 100644
+--- a/Frontend/app/(tabs)/home.tsx
++++ b/Frontend/app/(tabs)/home.tsx
+@@ -1,8 +1,9 @@
+ import { Feather } from '@expo/vector-icons';
+-import { router } from 'expo-router';
++import { router, useFocusEffect } from 'expo-router';
+ import React from 'react';
+ import { Image, Pressable, ScrollView, StyleSheet, Text, View, Dimensions } from 'react-native';
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
++import { fetchNotifications } from '@/api/liveClasses';
+ import { CATEGORIES } from '@/constants/data';
+ import { useApp } from '@/context/AppContext';
+ import { useColors } from '@/hooks/useColors';
+@@ -17,6 +18,16 @@ export default function HomeScreen() {
+   
+   const [banners, setBanners] = React.useState<any[]>([]);
+   const [loading, setLoading] = React.useState(true);
++  const [unreadCount, setUnreadCount] = React.useState(0);
++
++  useFocusEffect(
++    React.useCallback(() => {
++      if (!user) return;
++      fetchNotifications()
++        .then((data) => setUnreadCount(data.filter((notification) => !notification.isRead).length))
++        .catch((e) => console.warn('Notifications fetch error:', e.message));
++    }, [user]),
++  );
+ 
+   React.useEffect(() => {
+     fetch('http://localhost:5000/api/banners')
+@@ -52,9 +63,19 @@ export default function HomeScreen() {
+           <Text style={[styles.eyebrow, { color: colors.inkSubtle }]}>SUNDAY, 27 SEPTEMBER</Text>
+           <Text style={[styles.greeting, { color: colors.navy }]}>Hello, {firstName}</Text>
+         </View>
+-        <Pressable style={[styles.avatar, { backgroundColor: colors.navy }]} onPress={() => router.push('/(tabs)/profile')}>
+-          <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{firstName.slice(0, 1).toUpperCase()}</Text>
+-        </Pressable>
++        <View style={styles.headerActions}>
++          <Pressable testID="notifications-bell" style={[styles.bell, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => router.push('/notifications')}>
++            <Feather name="bell" size={19} color={colors.navy} />
++            {unreadCount > 0 && (
++              <View style={[styles.bellBadge, { backgroundColor: colors.coral, borderColor: colors.background }]}>
++                <Text style={[styles.bellBadgeText, { color: colors.primaryForeground }]}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
++              </View>
++            )}
++          </Pressable>
++          <Pressable style={[styles.avatar, { backgroundColor: colors.navy }]} onPress={() => router.push('/(tabs)/profile')}>
++            <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{firstName.slice(0, 1).toUpperCase()}</Text>
++          </Pressable>
++        </View>
+       </View>
+ 
+       {/* Banner Carousel */}
+@@ -110,6 +131,10 @@ const styles = StyleSheet.create({
+   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
+   eyebrow: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1.1, marginBottom: 7 },
+   greeting: { fontFamily: 'Inter_700Bold', fontSize: 27, letterSpacing: -0.8 },
++  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
++  bell: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
++  bellBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
++  bellBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 9 },
+   avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 17 },
+   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
+diff --git a/Frontend/app/_layout.tsx b/Frontend/app/_layout.tsx
+index 0f460e8..2beccb3 100644
+--- a/Frontend/app/_layout.tsx
++++ b/Frontend/app/_layout.tsx
+@@ -27,6 +27,7 @@ function RootLayoutNav() {
+       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+       <Stack.Screen name="course/[id]" options={{ headerShown: false }} />
+       <Stack.Screen name="quiz/[id]" options={{ headerShown: false }} />
++      <Stack.Screen name="notifications" options={{ headerShown: false }} />
+     </Stack>
+   );
+ }
+diff --git a/Frontend/app/course/[id].tsx b/Frontend/app/course/[id].tsx
+index a3aa973..41a3967 100644
+--- a/Frontend/app/course/[id].tsx
++++ b/Frontend/app/course/[id].tsx
+@@ -1,14 +1,18 @@
+ import { Feather } from '@expo/vector-icons';
+ import * as Haptics from 'expo-haptics';
+ import * as Linking from 'expo-linking';
+-import { router, useLocalSearchParams } from 'expo-router';
+-import React, { useMemo, useState } from 'react';
++import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
++import React, { useCallback, useMemo, useState } from 'react';
+ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+ import { formatPrice } from '@/constants/data';
+ import { useApp } from '@/context/AppContext';
+ import { useColors } from '@/hooks/useColors';
+ import { API_BASE_URL } from '@/api/client';
++import { fetchPublicCoupons, redeemCoupon, validateCoupon } from '@/api/coupons';
++import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
++import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
++import { useNow } from '@/hooks/useNow';
+ 
+ export default function CourseDetailScreen() {
+   const colors = useColors();
+@@ -59,6 +63,11 @@ export default function CourseDetailScreen() {
+   const [coupon, setCoupon] = useState('');
+   const [discount, setDiscount] = useState(0);
+   const [couponMessage, setCouponMessage] = useState('');
++  const [couponValid, setCouponValid] = useState(false);
++  const [appliedCode, setAppliedCode] = useState<string | null>(null);
++  const [applyingCoupon, setApplyingCoupon] = useState(false);
++  const [purchasing, setPurchasing] = useState(false);
++  const [publicCoupon, setPublicCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
+   const [activeTab, setActiveTab] = useState<'content'>('content');
+   const [courseContent, setCourseContent] = useState<any[]>([]);
+   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+@@ -79,24 +88,76 @@ export default function CourseDetailScreen() {
+     }
+   }, [unlocked, user?.uid, course]);
+ 
+-  const applyCoupon = () => {
++  // Live classes are only returned by the API for students enrolled in this course
++  const [liveClasses, setLiveClasses] = useState<LiveClass[]>([]);
++  const now = useNow();
++
++  useFocusEffect(
++    useCallback(() => {
++      if (!unlocked || !user?.uid || !course) return;
++      let active = true;
++      fetchCourseLiveClasses(course.id)
++        .then((data) => { if (active) setLiveClasses(data); })
++        .catch((e) => {
++          console.warn('Live classes fetch error:', e.message);
++          if (active) setLiveClasses([]);
++        });
++      return () => { active = false; };
++    }, [unlocked, user?.uid, course]),
++  );
++
++  const visibleLiveClasses = liveClasses.filter((liveClass) => getLiveClassStatus(liveClass, now) !== 'ended');
++
++  // Suggest a public coupon that applies to this course
++  React.useEffect(() => {
++    if (!course || unlocked) return;
++    fetchPublicCoupons(course.id)
++      .then((coupons) => setPublicCoupon(coupons[0] ?? null))
++      .catch(() => setPublicCoupon(null));
++  }, [course, unlocked]);
++
++  const clearCoupon = (message: string) => {
++    setDiscount(0);
++    setAppliedCode(null);
++    setCouponValid(false);
++    setCouponMessage(message);
++  };
++
++  const applyCoupon = async () => {
+     const code = coupon.trim().toUpperCase();
+-    if (code === 'FESTIVE20') {
+-      setDiscount(Math.round((course?.price || 0) * 0.2));
+-      setCouponMessage('20% off applied');
+-    } else if (code === 'STUDY100') {
+-      setDiscount(100);
+-      setCouponMessage('Ôé╣100 off applied');
+-    } else {
+-      setDiscount(0);
+-      setCouponMessage('That code is not active yet.');
++    if (!course || !code) return;
++    setApplyingCoupon(true);
++    try {
++      const quote = await validateCoupon(code, course.id);
++      setDiscount(quote.discountAmount);
++      setAppliedCode(quote.code);
++      setCouponValid(true);
++      setCouponMessage(`${quote.discountPercent}% off applied`);
++    } catch (e: any) {
++      clearCoupon(e.message || 'That code is not valid.');
++    } finally {
++      setApplyingCoupon(false);
+     }
+   };
+ 
+   const buyNow = async () => {
+-    if (!course) return;
+-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+-    await purchaseCourse(course.id.toString());
++    if (!course || purchasing) return;
++    setPurchasing(true);
++    try {
++      // Use up the coupon before unlocking; it may have run out since it was applied
++      if (appliedCode) {
++        try {
++          await redeemCoupon(appliedCode, course.id);
++        } catch (e: any) {
++          clearCoupon(`${e.message || 'This coupon can no longer be used'}. Please review the price and try again.`);
++          return;
++        }
++      }
++      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
++      await purchaseCourse(course.id.toString());
++    } finally {
++      setPurchasing(false);
++    }
+   };
+ 
+   const openExternal = (url: string) => Linking.openURL(url);
+@@ -151,16 +212,16 @@ export default function CourseDetailScreen() {
+           {!unlocked ? (
+             <>
+               <View style={[styles.couponCard, { backgroundColor: colors.accent }]}>
+-                <View style={styles.couponHeader}><View><Text style={[styles.cardTitle, { color: colors.navy }]}>Have a coupon?</Text><Text style={[styles.couponHint, { color: colors.inkSubtle }]}>Try FESTIVE20 for 20% off</Text></View><Feather name="tag" size={20} color={colors.coral} /></View>
++                <View style={styles.couponHeader}><View><Text style={[styles.cardTitle, { color: colors.navy }]}>Have a coupon?</Text><Text style={[styles.couponHint, { color: colors.inkSubtle }]}>{publicCoupon ? `Try ${publicCoupon.code} for ${publicCoupon.discountPercent}% off` : 'Enter your code to get a discount'}</Text></View><Feather name="tag" size={20} color={colors.coral} /></View>
+                 <View style={styles.couponInputRow}>
+-                  <TextInput value={coupon} onChangeText={setCoupon} placeholder="Enter code" placeholderTextColor={colors.inkSubtle} autoCapitalize="characters" style={[styles.couponInput, { color: colors.navy, borderColor: colors.input, backgroundColor: colors.card }]} />
+-                  <Pressable onPress={applyCoupon} style={[styles.applyButton, { backgroundColor: colors.navy }]}><Text style={[styles.applyText, { color: colors.primaryForeground }]}>Apply</Text></Pressable>
++                  <TextInput value={coupon} onChangeText={(text) => { setCoupon(text); if (appliedCode) clearCoupon(''); }} placeholder="Enter code" placeholderTextColor={colors.inkSubtle} autoCapitalize="characters" style={[styles.couponInput, { color: colors.navy, borderColor: colors.input, backgroundColor: colors.card }]} />
++                  <Pressable onPress={applyCoupon} disabled={applyingCoupon} style={[styles.applyButton, { backgroundColor: colors.navy, opacity: applyingCoupon ? 0.7 : 1 }]}><Text style={[styles.applyText, { color: colors.primaryForeground }]}>{applyingCoupon ? '...' : 'Apply'}</Text></Pressable>
+                 </View>
+-                {couponMessage ? <Text style={[styles.couponMessage, { color: couponMessage.includes('applied') ? colors.success : colors.destructive }]}>{couponMessage}</Text> : null}
++                {couponMessage ? <Text style={[styles.couponMessage, { color: couponValid ? colors.success : colors.destructive }]}>{couponMessage}</Text> : null}
+               </View>
+               <View style={styles.checkoutRow}>
+                 <View><Text style={[styles.totalLabel, { color: colors.inkSubtle }]}>TOTAL TODAY</Text><Text style={[styles.totalPrice, { color: colors.navy }]}>{formatPrice(course.price - discount)} <Text style={[styles.originalPrice, { color: colors.inkSubtle }]}>{formatPrice(course.originalPrice)}</Text></Text></View>
+-                <Pressable testID="buy-now-button" onPress={buyNow} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>Buy now</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
++                <Pressable testID="buy-now-button" onPress={buyNow} disabled={purchasing} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed || purchasing ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>Buy now</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
+               </View>
+               <View style={styles.lockedNote}><Feather name="lock" size={13} color={colors.inkSubtle} /><Text style={[styles.lockedText, { color: colors.inkSubtle }]}>Notes, live classes, replays & tests unlock instantly.</Text></View>
+             </>
+@@ -171,6 +232,15 @@ export default function CourseDetailScreen() {
+                 <View style={{ flex: 1 }}><Text style={[styles.unlockedIntroTitle, { color: colors.primaryForeground }]}>YouÔÇÖre all set.</Text><Text style={[styles.unlockedIntroText, { color: '#bdc8df' }]}>Access your course materials below.</Text></View>
+                 <Feather name="star" size={20} color={colors.gold} />
+               </View>
++
++              {visibleLiveClasses.length > 0 && (
++                <View style={{ marginBottom: 4 }}>
++                  <Text style={[styles.cardTitle, { color: colors.navy, marginBottom: 10 }]}>Live Classes</Text>
++                  {visibleLiveClasses.map((liveClass) => (
++                    <LiveClassCard key={liveClass.id} liveClass={liveClass} now={now} />
++                  ))}
++                </View>
++              )}
+               
+               <View style={[styles.contentPanel, { backgroundColor: colors.card, borderColor: colors.border, padding: 12 }]}>
+                 {loadingContent ? (
+diff --git a/Frontend/metro.config.js b/Frontend/metro.config.js
+index 0596393..a2f15d8 100644
+--- a/Frontend/metro.config.js
++++ b/Frontend/metro.config.js
+@@ -6,13 +6,14 @@ const workspaceRoot = path.resolve(projectRoot, '..');
+ 
+ const config = getDefaultConfig(projectRoot);
+ 
+-// Ignore backend, git, and IDE metadata folders so Metro bundler stays lightweight & fast
++// Ignore backend, cms, git, and pnpm store metadata so Metro bundler stays lightweight & fast
+ config.resolver.blockList = [
+   /Backend\/.*/,
++  /CMS-Portal\/.*/,
+   /\.git\/.*/,
+   /\.idea\/.*/,
+   /\.gsd\/.*/,
+-  /node_modules\/.*\/node_modules\/.*/
++  /node_modules\/\.pnpm\/.*/,
+ ];
+ 
+ config.watchFolders = [workspaceRoot];
+diff --git a/Frontend/package.json b/Frontend/package.json
+index ff13260..3b1f9c1 100644
+--- a/Frontend/package.json
++++ b/Frontend/package.json
+@@ -59,6 +59,7 @@
+     "@msg91comm/sendotp-react-native": "^3.0.0",
+     "expo": "~57.0.25",
+     "expo-asset": "~57.0.18",
++    "expo-dev-client": "~57.0.19",
+     "firebase": "^12.19.0",
+     "react": "19.2.3",
+     "react-native": "0.86.3",
