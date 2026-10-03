@@ -122,9 +122,13 @@ router.post(
       return;
     }
 
-    // Format S3 Key: courses/${courseId}/${Date.now()}-${fileName}
+    // Sanitize courseId and fileName (prevent leading/trailing slashes, invalid chars, and path traversal)
+    const cleanCourseId = String(courseId)
+      .trim()
+      .replace(/^\/+|\/+$/g, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
     const cleanFileName = path.basename(fileName.trim()).replace(/[^a-zA-Z0-9._-]/g, "_");
-    const key = `courses/${courseId}/${Date.now()}-${cleanFileName}`;
+    const key = `courses/${cleanCourseId}/${Date.now()}-${cleanFileName}`.replace(/^\/+/, "");
 
     try {
       const command = new PutObjectCommand({

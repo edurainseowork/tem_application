@@ -75,6 +75,19 @@ export async function getUploadPresignedUrl(
   };
 }
 
+function parseS3Error(responseText: string): { code?: string; message?: string } {
+  try {
+    const codeMatch = responseText.match(/<Code>(.*?)<\/Code>/i);
+    const messageMatch = responseText.match(/<Message>(.*?)<\/Message>/i);
+    return {
+      code: codeMatch ? codeMatch[1] : undefined,
+      message: messageMatch ? messageMatch[1] : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Upload raw binary file to the presigned S3 PUT URL with real-time progress tracking.
  * Uses native XMLHttpRequest to avoid extra dependencies and accurately monitor progress events.
@@ -83,13 +96,15 @@ export async function getUploadPresignedUrl(
  * @param file The File object (PDF or Video) to upload
  * @param onProgress Callback receiving progress percentage (0 to 100)
  * @param signal Optional AbortSignal to cancel in-flight upload
+ * @param contentType Optional explicit MIME type that was signed in the Presigned URL
  * @returns {Promise<{ success: boolean; status: number }>}
  */
 export function uploadFileWithProgress(
   uploadUrl: string,
   file: File,
   onProgress?: ProgressCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  contentType?: string
 ): Promise<{ success: boolean; status: number }> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -99,10 +114,14 @@ export function uploadFileWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl, true);
 
-    // Set matching Content-Type header for S3 PUT signature match
-    if (file.type) {
-      xhr.setRequestHeader('Content-Type', file.type);
-    }
+    // Resolve and strictly normalize Content-Type header to match S3 signed signature
+    const resolvedContentType = (
+      contentType ||
+      file.type ||
+      (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream')
+    ).toLowerCase().trim().split(';')[0];
+
+    xhr.setRequestHeader('Content-Type', resolvedContentType);
 
     // Handle abort signal
     if (signal) {
@@ -130,14 +149,44 @@ export function uploadFileWithProgress(
         }
         resolve({ success: true, status: xhr.status });
       } else {
-        const errText = xhr.responseText || xhr.statusText || 'Unknown error';
-        reject(new Error(`S3 upload failed with status ${xhr.status}: ${errText}`));
+        const rawXml = xhr.responseText || '';
+        const { code, message } = parseS3Error(rawXml);
+        const detail = code
+          ? `S3 Error [${code}]: ${message || 'No message provided'}`
+          : (rawXml || xhr.statusText || 'Unknown S3 error');
+
+        console.error(`[uploadService] Direct S3 upload rejected (HTTP ${xhr.status}):`, {
+          httpStatus: xhr.status,
+          statusText: xhr.statusText,
+          s3ErrorCode: code,
+          s3ErrorMessage: message,
+          rawXml,
+          uploadUrl: uploadUrl.replace(/\?.*$/, '?<presigned-params-hidden>'),
+          file: { name: file.name, size: file.size, type: file.type, resolvedContentType },
+        });
+
+        reject(new Error(`S3 upload failed (HTTP ${xhr.status}): ${detail}`));
       }
     };
 
-    // Network / error handlers
+    // Network / CORS error handlers
     xhr.onerror = () => {
-      reject(new Error('Network error during file upload to S3. Please check your connection.'));
+      console.error('[uploadService] XMLHttpRequest network/CORS error:', {
+        status: xhr.status,
+        readyState: xhr.readyState,
+        statusText: xhr.statusText,
+        uploadUrl: uploadUrl.replace(/\?.*$/, '?<presigned-params-hidden>'),
+        origin: typeof window !== 'undefined' ? window.location.origin : 'unknown',
+        file: { name: file.name, size: file.size, type: file.type, resolvedContentType },
+      });
+
+      reject(
+        new Error(
+          `Failed uploading directly to Amazon S3 (HTTP Status ${xhr.status || 0}). ` +
+          `This typically indicates that Amazon S3 rejected the preflight OPTIONS request due to a missing or misconfigured S3 Bucket CORS policy for origin '${typeof window !== 'undefined' ? window.location.origin : 'CMS origin'}', ` +
+          `or an active network block. Please check the S3 Bucket CORS configuration.`
+        )
+      );
     };
 
     xhr.onabort = () => {
@@ -170,15 +219,19 @@ export async function uploadMediaToS3(
   onProgress?: ProgressCallback,
   signal?: AbortSignal
 ): Promise<{ fileUrl: string; key: string }> {
+  const mimeType = (
+    file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream')
+  ).toLowerCase().trim().split(';')[0];
+
   // 1. Get presigned PUT URL
   const { uploadUrl, key, fileUrl } = await getUploadPresignedUrl(
     file.name,
-    file.type || 'application/octet-stream',
+    mimeType,
     courseId
   );
 
-  // 2. Upload to S3 with progress
-  await uploadFileWithProgress(uploadUrl, file, onProgress, signal);
+  // 2. Upload to S3 with progress and explicit matched Content-Type
+  await uploadFileWithProgress(uploadUrl, file, onProgress, signal, mimeType);
 
   return { fileUrl, key };
 }
