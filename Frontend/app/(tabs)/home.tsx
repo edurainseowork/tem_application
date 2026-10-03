@@ -26,9 +26,14 @@ export default function HomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       if (!user) return;
-      fetchNotifications()
-        .then((data) => setUnreadCount(data.filter((notification) => !notification.isRead).length))
-        .catch((e) => console.warn('Notifications fetch error:', e.message));
+      const loadUnread = () => {
+        fetchNotifications()
+          .then((data) => setUnreadCount(data.filter((notification) => !notification.isRead).length))
+          .catch((e) => console.warn('Notifications fetch error:', e.message));
+      };
+      loadUnread();
+      const interval = setInterval(loadUnread, 5000);
+      return () => clearInterval(interval);
     }, [user]),
   );
 
