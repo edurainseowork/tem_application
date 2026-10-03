@@ -406,21 +406,22 @@ export default function CourseContentManager({
 
     try {
       // Step A: Request S3 Presigned URL
-      const mimeType = uploadFile.type || (uploadType === 'pdf' ? 'application/pdf' : 'video/mp4');
+      const mimeType = (uploadFile.type || (uploadType === 'pdf' ? 'application/pdf' : 'video/mp4')).toLowerCase().trim().split(';')[0];
       const presigned = await getUploadPresignedUrl(
         uploadFile.name,
         mimeType,
         activeCourseId
       );
 
-      // Step B: Stream Raw Binary to S3 with Progress
+      // Step B: Stream Raw Binary to S3 with Progress & explicit Content-Type match
       await uploadFileWithProgress(
         presigned.uploadUrl,
         uploadFile,
         (percent) => {
           setUploadProgress(percent);
         },
-        abortController.signal
+        abortController.signal,
+        mimeType
       );
 
       // Step C: Record asset in database via POST /api/content
@@ -555,10 +556,16 @@ export default function CourseContentManager({
         activeCourseId
       );
 
-      // Upload binary to S3
-      await uploadFileWithProgress(presigned.uploadUrl, replaceFile, (pct) => {
-        setReplaceProgress(pct);
-      });
+      // Upload binary to S3 with explicit Content-Type match
+      await uploadFileWithProgress(
+        presigned.uploadUrl,
+        replaceFile,
+        (pct) => {
+          setReplaceProgress(pct);
+        },
+        undefined,
+        mimeType
+      );
 
       // Update record via PATCH /api/content/:id
       const res = await apiFetch<{ success: boolean; data: ContentItem }>(
