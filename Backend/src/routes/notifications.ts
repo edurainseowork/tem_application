@@ -4,12 +4,13 @@ import { coursesTable, liveClassesTable, notificationsTable } from "@workspace/d
 import { getLiveClassStatus } from "@workspace/api-zod";
 import { and, desc, eq } from "drizzle-orm";
 import { findDbUserId, requireAuth } from "../middlewares/auth.js";
+import { MAX_NOTIFICATIONS_PER_USER } from "./liveClasses.js";
 
 const router = Router();
 
 router.use(requireAuth);
 
-// Get the signed-in student's notifications, newest first
+// Get the signed-in student's latest notifications, newest first
 router.get("/", async (req, res) => {
   try {
     const userId = await findDbUserId(res.locals.firebaseUser.uid);
@@ -27,8 +28,8 @@ router.get("/", async (req, res) => {
       .leftJoin(liveClassesTable, eq(notificationsTable.liveClassId, liveClassesTable.id))
       .leftJoin(coursesTable, eq(liveClassesTable.courseId, coursesTable.id))
       .where(eq(notificationsTable.userId, userId))
-      .orderBy(desc(notificationsTable.createdAt))
-      .limit(50);
+      .orderBy(desc(notificationsTable.createdAt), desc(notificationsTable.id))
+      .limit(MAX_NOTIFICATIONS_PER_USER);
 
     res.json({
       success: true,
