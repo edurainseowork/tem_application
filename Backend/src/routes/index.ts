@@ -10,9 +10,9 @@ import { authRouter } from "./auth.js";
 import statsRouter from "./stats.js";
 import liveClassesRouter from "./liveClasses.js";
 import notificationsRouter from "./notifications.js";
-
+import enrollmentsRouter from "./enrollments.js";
 const router = Router();
-
+router.use("/enrollments", enrollmentsRouter);
 router.use("/health", healthRouter);
 // Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
 router.use(liveClassesRouter);

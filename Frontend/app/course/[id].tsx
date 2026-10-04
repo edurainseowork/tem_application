@@ -1,9 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
+<<<<<<< Updated upstream
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+=======
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+>>>>>>> Stashed changes
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
@@ -12,8 +18,13 @@ import { API_BASE_URL } from '@/api/client';
 import { fetchPublicCoupons, redeemCoupon, validateCoupon } from '@/api/coupons';
 import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
 import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
+<<<<<<< Updated upstream
 import { useNow } from '@/hooks/useNow';
 
+=======
+import { validateCoupon, redeemCoupon, fetchPublicCoupons } from '@/api/coupons';
+import { enrollInCourse } from '@/api/enrollments';
+>>>>>>> Stashed changes
 export default function CourseDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -153,6 +164,12 @@ export default function CourseDetailScreen() {
           return;
         }
       }
+      // Save the purchase on the backend too, so Go Live notifications reach this student
+      try {
+        await enrollInCourse(course.id);
+      } catch (e: any) {
+        Alert.alert('Enrollment not saved', `${e.message}. You may not receive live class notifications for this course.`);
+      }      
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await purchaseCourse(course.id.toString());
     } finally {

@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import type { NextFunction, Request, Response } from "express";
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { db } from "@workspace/db";
@@ -57,4 +58,49 @@ export const canAccessCourse = async (token: DecodedIdToken, courseId: number): 
   if (isAdminToken(token)) return true;
   const userId = await findDbUserId(token.uid);
   return userId !== null && isEnrolled(userId, courseId);
+=======
+// Adapter: lets the Go Live / notifications / coupon routes use the team's auth in ../middleware/auth.
+// Those routes read the verified Firebase token from res.locals.firebaseUser, so the wrappers below set it.
+import type { NextFunction, Request, Response } from "express";
+import type { DecodedIdToken } from "firebase-admin/auth";
+import { eq } from "drizzle-orm";
+import { db } from "../db/index.js";
+import { users as usersTable } from "../db/schema.js";
+import {
+  isAdminOrFaculty,
+  requireAdmin as teamRequireAdmin,
+  requireAuth as teamRequireAuth,
+  verifyCourseEntitlement,
+} from "../middleware/auth.js";
+
+export * from "../middleware/auth.js";
+
+// Runs the team middleware, then exposes the decoded token on res.locals for our routes
+const withFirebaseUser =
+  (middleware: (req: Request, res: Response, next: NextFunction) => unknown) =>
+  async (req: Request, res: Response, next: NextFunction) => {
+    await middleware(req, res, () => {
+      res.locals.firebaseUser = req.auth;
+      next();
+    });
+  };
+
+// These local exports take precedence over the same names from `export *` above
+export const requireAuth = withFirebaseUser(teamRequireAuth);
+export const requireAdmin = withFirebaseUser(teamRequireAdmin);
+
+export const findDbUserId = async (firebaseUid: string): Promise<number | null> => {
+  const [user] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.firebaseUid, firebaseUid))
+    .limit(1);
+  return user?.id ?? null;
+};
+
+// Admins and faculty see every course; students only courses they are enrolled in
+export const canAccessCourse = async (token: DecodedIdToken, courseId: number): Promise<boolean> => {
+  if (isAdminOrFaculty(token)) return true;
+  return verifyCourseEntitlement(token.uid, courseId);
+>>>>>>> Stashed changes
 };
