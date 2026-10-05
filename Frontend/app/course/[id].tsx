@@ -1,19 +1,19 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
-import { ApiError, fetchCourse, fetchCourseContent, type CourseContentItem } from '@/api/client';
+import { API_BASE_URL } from '@/api/client';
+import { fetchPublicCoupons, redeemCoupon, validateCoupon } from '@/api/coupons';
 import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
-import { useNow } from '@/hooks/useNow';
 import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
-import { validateCoupon, redeemCoupon, fetchPublicCoupons } from '@/api/coupons';
-
+import { useNow } from '@/hooks/useNow';
+import { enrollInCourse } from '@/api/enrollments';
 export default function CourseDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -26,25 +26,36 @@ export default function CourseDetailScreen() {
   React.useEffect(() => {
     if (!id) return;
     
-    fetchCourse(id)
+    fetch(`${API_BASE_URL}/api/courses/${id}`)
+      .then(async (res) => {
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          return res.json();
+        } else {
+          const text = await res.text();
+          throw new Error("Received non-JSON response from API: " + text.substring(0, 50));
+        }
+      })
       .then(data => {
-        if (data) {
+        if (!data.error) {
           setCourse({
             ...data,
-            // API prices are in paise; this screen works in rupees.
-            price: data.price / 100,
-            originalPrice: data.originalPrice && data.originalPrice > data.price ? data.originalPrice / 100 : null,
             subtitle: data.category + " Mastery",
             instructor: "Expert Mentor",
             validity: "12 months access",
             lessons: 42,
             students: "2k+ students",
+            originalPrice: Math.round((data.price || 0) * 1.5),
             tone: 'coral',
             duration: "40 hours"
           });
         }
+        setLoading(false);
       })
-      .finally(() => setLoading(false));
+      .catch(e => {
+        console.warn("Course fetch error:", e.message);
+        setLoading(false);
+      });
   }, [id]);
 
   const unlocked = course ? isPurchased(course.id.toString()) : false;
@@ -52,39 +63,27 @@ export default function CourseDetailScreen() {
   const [coupon, setCoupon] = useState('');
   const [discount, setDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState('');
-  const [publicCoupon, setPublicCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
-  const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [couponValid, setCouponValid] = useState(false);
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [publicCoupon, setPublicCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'content'>('content');
-  const [courseContent, setCourseContent] = useState<CourseContentItem[]>([]);
-  const [contentError, setContentError] = useState('');
-  const [currentFolderId, setCurrentFolderId] = useState<string | number | null>(null);
+  const [courseContent, setCourseContent] = useState<any[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
 
   React.useEffect(() => {
     if (unlocked && user?.uid && course) {
       setLoadingContent(true);
-      setContentError('');
-      // Access is checked server-side against the signed-in user's purchases.
-      fetchCourseContent(course.id)
-        .then((res: any) => {
-          const dataArray = Array.isArray(res?.data)
-            ? res.data
-            : Array.isArray(res)
-            ? res
-            : (res?.data?.data || res?.data?.content || res?.content || []);
-          setCourseContent(Array.isArray(dataArray) ? dataArray : []);
+      fetch(`${API_BASE_URL}/api/content/${course.id}?uid=${user.uid}&admin=true`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setCourseContent(data.data);
+          }
         })
-        .catch(e => {
-          setCourseContent([]);
-          setContentError(
-            e instanceof ApiError && e.status === 403
-              ? 'We could not confirm your purchase yet. If you just paid, please try again in a moment.'
-              : 'Could not load course materials. Please try again.',
-          );
-        })
+        .catch(e => console.error("Content fetch error:", e))
         .finally(() => setLoadingContent(false));
     }
   }, [unlocked, user?.uid, course]);
@@ -93,17 +92,23 @@ export default function CourseDetailScreen() {
   const [liveClasses, setLiveClasses] = useState<LiveClass[]>([]);
   const now = useNow();
 
-  React.useEffect(() => {
-    if (!unlocked || !user?.uid || !course) return;
-    let active = true;
-    fetchCourseLiveClasses(course.id)
-      .then((data) => { if (active) setLiveClasses(data); })
-      .catch((e) => {
-        console.warn('Live classes fetch error:', e.message);
-        if (active) setLiveClasses([]);
-      });
-    return () => { active = false; };
-  }, [unlocked, user?.uid, course]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!unlocked || !user?.uid || !course) return;
+      let active = true;
+      const load = () => {
+        fetchCourseLiveClasses(course.id)
+          .then((data) => { if (active) setLiveClasses(data); })
+          .catch((e) => {
+            console.warn('Live classes fetch error:', e.message);
+            if (active) setLiveClasses([]);
+          });
+      };
+      load();
+      const interval = setInterval(load, 20000); // polls every 20s
+      return () => { active = false; clearInterval(interval); };
+    }, [unlocked, user?.uid, course]),
+  );
 
   const visibleLiveClasses = liveClasses.filter((liveClass) => getLiveClassStatus(liveClass, now) !== 'ended');
 
@@ -125,20 +130,6 @@ export default function CourseDetailScreen() {
   const applyCoupon = async () => {
     const code = coupon.trim().toUpperCase();
     if (!course || !code) return;
-    
-    // Offline/Static fallback coupons
-    if (code === 'FESTIVE20') {
-      setDiscount(Math.round(course.price * 0.2));
-      setCouponMessage('20% off applied');
-      setCouponValid(true);
-      return;
-    } else if (code === 'STUDY100') {
-      setDiscount(100);
-      setCouponMessage('₹100 off applied');
-      setCouponValid(true);
-      return;
-    }
-
     setApplyingCoupon(true);
     try {
       const quote = await validateCoupon(code, course.id);
@@ -166,6 +157,12 @@ export default function CourseDetailScreen() {
           return;
         }
       }
+      // Save the purchase on the backend too, so Go Live notifications reach this student
+      try {
+        await enrollInCourse(course.id);
+      } catch (e: any) {
+        Alert.alert('Enrollment not saved', `${e.message}. You may not receive live class notifications for this course.`);
+      }      
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await purchaseCourse(course.id.toString());
     } finally {
@@ -233,7 +230,7 @@ export default function CourseDetailScreen() {
                 {couponMessage ? <Text style={[styles.couponMessage, { color: couponValid ? colors.success : colors.destructive }]}>{couponMessage}</Text> : null}
               </View>
               <View style={styles.checkoutRow}>
-                <View><Text style={[styles.totalLabel, { color: colors.inkSubtle }]}>TOTAL TODAY</Text><Text style={[styles.totalPrice, { color: colors.navy }]}>{formatPrice(course.price - discount)} {course.originalPrice ? <Text style={[styles.originalPrice, { color: colors.inkSubtle }]}>{formatPrice(course.originalPrice)}</Text> : null}</Text></View>
+                <View><Text style={[styles.totalLabel, { color: colors.inkSubtle }]}>TOTAL TODAY</Text><Text style={[styles.totalPrice, { color: colors.navy }]}>{formatPrice((course.price - discount) / 100)} {course.originalPrice != null && course.originalPrice > course.price && <Text style={[styles.originalPrice, { color: colors.inkSubtle }]}>{formatPrice(course.originalPrice / 100)}</Text>}</Text></View>
                 <Pressable testID="buy-now-button" onPress={buyNow} disabled={purchasing} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed || purchasing ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>Buy now</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
               </View>
               <View style={styles.lockedNote}><Feather name="lock" size={13} color={colors.inkSubtle} /><Text style={[styles.lockedText, { color: colors.inkSubtle }]}>Notes, live classes, replays & tests unlock instantly.</Text></View>
@@ -247,8 +244,8 @@ export default function CourseDetailScreen() {
               </View>
 
               {visibleLiveClasses.length > 0 && (
-                <View style={{ marginBottom: 4, marginTop: 12 }}>
-                  <Text style={[styles.cardTitle, { color: colors.navy, marginBottom: 10, paddingHorizontal: 4 }]}>Live Classes</Text>
+                <View style={{ marginBottom: 4 }}>
+                  <Text style={[styles.cardTitle, { color: colors.navy, marginBottom: 10 }]}>Live Classes</Text>
                   {visibleLiveClasses.map((liveClass) => (
                     <LiveClassCard key={liveClass.id} liveClass={liveClass} now={now} />
                   ))}
@@ -258,8 +255,6 @@ export default function CourseDetailScreen() {
               <View style={[styles.contentPanel, { backgroundColor: colors.card, borderColor: colors.border, padding: 12 }]}>
                 {loadingContent ? (
                   <Text style={{ color: colors.inkSubtle, padding: 10 }}>Loading content...</Text>
-                ) : contentError ? (
-                  <Text style={{ color: colors.inkSubtle, padding: 10, textAlign: 'center' }}>{contentError}</Text>
                 ) : (
                   <>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>
@@ -274,110 +269,30 @@ export default function CourseDetailScreen() {
                           </Text>
                         </>
                       )}
-                      <Pressable
-                        onPress={() =>
-                          router.push({
-                            pathname: '/course/[id]/content',
-                            params: { id: String(course.id), title: course.title },
-                          } as any)
-                        }
-                        style={{
-                          marginLeft: 'auto',
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 5,
-                          backgroundColor: colors.coral,
-                          paddingHorizontal: 10,
-                          paddingVertical: 5,
-                          borderRadius: 7,
-                        }}
-                      >
-                        <Feather name="book-open" size={13} color="#ffffff" />
-                        <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#ffffff' }}>
-                          Open Curriculum
-                        </Text>
-                      </Pressable>
                     </View>
 
-                    {courseContent.filter((c) => {
-                      if (currentFolderId === null) {
-                        return c.parentId === null || !c.parentId || c.parentId === 'null' || c.parentId === 'undefined';
-                      }
-                      return String(c.parentId) === String(currentFolderId);
-                    }).length === 0 ? (
-                      <Text style={{ color: colors.inkSubtle, padding: 10, textAlign: 'center' }}>
-                        This folder is empty.
-                      </Text>
+                    {courseContent.filter(c => c.parentId === currentFolderId).length === 0 ? (
+                      <Text style={{ color: colors.inkSubtle, padding: 10, textAlign: 'center' }}>This folder is empty.</Text>
                     ) : (
-                      courseContent
-                        .filter((c) => {
-                          if (currentFolderId === null) {
-                            return c.parentId === null || !c.parentId || c.parentId === 'null' || c.parentId === 'undefined';
-                          }
-                          return String(c.parentId) === String(currentFolderId);
-                        })
-                        .map((item) => (
-                          <Pressable
-                            key={item.id}
-                            onPress={() => {
-                              if (item.type === 'folder') {
-                                setCurrentFolderId(item.id);
-                              } else {
-                                // Open in-app student content viewer (sandboxed PDF reader / protected player)
-                                router.push({
-                                  pathname: '/course/[id]/content',
-                                  params: { id: String(course.id), title: course.title },
-                                } as any);
-                              }
-                            }}
-                            style={styles.contentRow}
-                          >
-                            <View
-                              style={[
-                                styles.contentIcon,
-                                {
-                                  backgroundColor:
-                                    item.type === 'folder'
-                                      ? colors.mint
-                                      : item.type === 'pdf'
-                                      ? colors.sky
-                                      : colors.accent,
-                                },
-                              ]}
-                            >
-                              <Feather
-                                name={
-                                  item.type === 'folder'
-                                    ? 'folder'
-                                    : item.type === 'pdf'
-                                    ? 'file-text'
-                                    : 'play'
-                                }
-                                size={18}
-                                color={
-                                  item.type === 'folder'
-                                    ? colors.teal
-                                    : item.type === 'pdf'
-                                    ? colors.lavender
-                                    : colors.coral
-                                }
-                              />
-                            </View>
-                            <View style={styles.contentRowBody}>
-                              <Text style={[styles.contentTitle, { color: colors.navy }]}>
-                                {item.title}
-                              </Text>
-                              <Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>
-                                {item.type.toUpperCase()}
-                              </Text>
-                            </View>
-                            <Feather
-                              name={item.type === 'folder' ? 'chevron-right' : 'arrow-up-right'}
-                              size={17}
-                              color={colors.inkSubtle}
-                            />
-                          </Pressable>
-                        ))
+                      courseContent.filter(c => c.parentId === currentFolderId).map(item => (
+                        <Pressable 
+                          key={item.id} 
+                          onPress={() => {
+                            if (item.type === 'folder') setCurrentFolderId(item.id);
+                            else if (item.url) openExternal(item.url);
+                          }}
+                          style={styles.contentRow}
+                        >
+                          <View style={[styles.contentIcon, { backgroundColor: item.type === 'folder' ? colors.mint : item.type === 'pdf' ? colors.sky : colors.accent }]}>
+                            <Feather name={item.type === 'folder' ? 'folder' : item.type === 'pdf' ? 'file-text' : 'play'} size={18} color={item.type === 'folder' ? colors.teal : item.type === 'pdf' ? colors.lavender : colors.coral} />
+                          </View>
+                          <View style={styles.contentRowBody}>
+                            <Text style={[styles.contentTitle, { color: colors.navy }]}>{item.title}</Text>
+                            <Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>{item.type.toUpperCase()}</Text>
+                          </View>
+                          <Feather name={item.type === 'folder' ? 'chevron-right' : 'external-link'} size={17} color={colors.inkSubtle} />
+                        </Pressable>
+                      ))
                     )}
                   </>
                 )}

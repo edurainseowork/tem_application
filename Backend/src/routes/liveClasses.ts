@@ -2,12 +2,15 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { coursesTable, liveClassesTable, notificationsTable, userCoursesTable, type LiveClass } from "@workspace/db/schema";
 import { CreateLiveClassBody, getLiveClassStatus } from "@workspace/api-zod";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { canAccessCourse, requireAdmin, requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Each student keeps only their most recent notifications; older ones are deleted
+export const MAX_NOTIFICATIONS_PER_USER = 20;
 
 const parseId = (value: string) => {
   const id = Number(value);
@@ -33,7 +36,26 @@ const notifyEnrolledStudents = async (tx: Tx, liveClass: LiveClass, courseTitle:
     body: `${liveClass.title} · ${courseTitle}`,
     liveClassId: liveClass.id,
   }))).onConflictDoNothing().returning({ id: notificationsTable.id });
+
+  await pruneOldNotifications(tx, enrolled.map(({ userId }) => userId));
   return inserted.length;
+};
+
+// Deletes everything beyond each user's newest MAX_NOTIFICATIONS_PER_USER notifications
+const pruneOldNotifications = async (tx: Tx, userIds: number[]) => {
+  if (userIds.length === 0) return;
+  await tx.execute(sql`
+    DELETE FROM ${notificationsTable}
+    WHERE ${notificationsTable.id} IN (
+      SELECT id FROM (
+        SELECT ${notificationsTable.id} AS id,
+               row_number() OVER (PARTITION BY ${notificationsTable.userId} ORDER BY ${notificationsTable.createdAt} DESC, ${notificationsTable.id} DESC) AS position
+        FROM ${notificationsTable}
+        WHERE ${notificationsTable.userId} IN (${sql.join(userIds.map((id) => sql`${id}`), sql`, `)})
+      ) ranked
+      WHERE position > ${MAX_NOTIFICATIONS_PER_USER}
+    )
+  `);
 };
 
 // Create a live class for a course and notify enrolled students (Admin)
@@ -162,7 +184,7 @@ router.delete("/live-classes/:id", requireAdmin, async (req, res) => {
   }
 
   try {
-    await db.delete(liveClassesTable).where(eq(liveClassesTable.id, id));
+    await db.transaction(async (tx) => { await tx.delete(notificationsTable).where(eq(notificationsTable.liveClassId, id)); await tx.delete(liveClassesTable).where(eq(liveClassesTable.id, id)); });
     res.json({ success: true });
   } catch (error) {
     console.error("Failed to delete live class", error);

@@ -382,33 +382,7 @@ function App() {
         )}
 
         {activeTab === 'coupons' && (
-          <>
-            <div className="glass-card">
-              <h3 style={{ marginBottom: 'var(--space-md)' }}>Generate Coupons</h3>
-              <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Coupon Code</label>
-                  <input type="text" placeholder="e.g. DIWALI50" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Discount Amount / %</label>
-                  <input type="text" placeholder="e.g. 500" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                </div>
-              </div>
-              
-              <div style={{ marginTop: 'var(--space-md)' }}>
-                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Coupon Type</label>
-                <select style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <option>Public (Visible to everyone)</option>
-                  <option>Private (Hidden, applies only via link/code)</option>
-                </select>
-              </div>
-
-              <button type="button" className="btn" style={{ marginTop: 'var(--space-lg)' }}>Generate Coupon</button>
-            </div>
-            
-            <Coupons user={user!} coursesList={coursesList} showToast={showToast} />
-          </>
+          <Coupons user={user!} coursesList={coursesList} showToast={showToast} />
         )}
 
         {activeTab === 'golive' && (
