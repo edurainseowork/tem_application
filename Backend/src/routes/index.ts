@@ -12,6 +12,7 @@ import categoriesRouter from "./categories.js";
 import adminRouter from "./admin/index.js";
 import liveClassesRouter from "./liveClasses.js";
 import notificationsRouter from "./notifications.js";
+import enrollmentsRouter from "./enrollments.js";
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use("/upload", uploadRouter);
 router.use("/banners", bannersRouter);
 router.use("/auth", authRouter);
 router.use("/stats", statsRouter);
+router.use("/enrollments", enrollmentsRouter);
 // Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
 router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);
