@@ -8,6 +8,7 @@ import CourseContentManager from './CourseContentManager'
 import RoleGuard from '../components/RoleGuard'
 import Coupons from './Coupons'
 import GoLive from './GoLive'
+import Notifications from './Notifications'
 import '../index.css'
 
 function App() {
@@ -250,6 +251,9 @@ function App() {
           <div className={`nav-link ${activeTab === 'golive' ? 'active' : ''}`} onClick={() => setActiveTab('golive')}>
             Go Live (Google Meet)
           </div>
+          <div className={`nav-link ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
+            Notifications
+          </div>
         </nav>
       </aside>
 
@@ -264,6 +268,7 @@ function App() {
             {activeTab === 'banners' && 'Manage Homepage Banners'}
             {activeTab === 'coupons' && 'Coupon Generator'}
             {activeTab === 'golive' && 'Live Classes'}
+            {activeTab === 'notifications' && 'Notifications'}
           </h1>
           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</span>
@@ -387,6 +392,10 @@ function App() {
 
         {activeTab === 'golive' && (
           <GoLive user={user!} coursesList={coursesList} showToast={showToast} />
+        )}
+
+        {activeTab === 'notifications' && (
+          <Notifications showToast={showToast} />
         )}
       </main>
     </div>

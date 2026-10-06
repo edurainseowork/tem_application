@@ -138,6 +138,34 @@ export const notificationsTable = pgTable("notifications", {
   uniqueIndex("notifications_user_id_live_class_id_idx").on(table.userId, table.liveClassId),
 ]);
 
+// ---- Admin notifications (separate from live class notifications) ----
+
+// Expo push tokens of the devices each user is signed in on (one row per device)
+export const pushTokensTable = pgTable("push_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: 'cascade' }).notNull(),
+  token: text("token").notNull().unique(),
+  platform: text("platform"), // 'android' | 'ios'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("push_tokens_user_id_idx").on(table.userId),
+]);
+
+// Notifications an admin sent to every user from the CMS (sidebar → Notifications).
+// Every user sees all of them, so one row per notification is enough.
+export const adminNotificationsTable = pgTable("admin_notifications", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  imageUrl: text("image_url"),
+  sentBy: text("sent_by"),
+  recipientCount: integer("recipient_count").default(0).notNull(),
+  pushSentCount: integer("push_sent_count").default(0).notNull(),
+  pushFailedCount: integer("push_failed_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Zod Schemas
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -157,3 +185,4 @@ export type CourseContentType = (typeof courseContentTypeEnum.enumValues)[number
 export type LiveClass = typeof liveClassesTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
 export type Coupon = typeof couponsTable.$inferSelect;
+export type AdminNotification = typeof adminNotificationsTable.$inferSelect;
