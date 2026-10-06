@@ -9,6 +9,7 @@ import { fetchAdminNotifications, getLastSeenAdminNotificationId } from '@/api/a
 import { API_BASE_URL, fetchCategories } from '@/api/client';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
+import BannerCarousel from '@/components/Home/BannerCarousel';
 
 const { width } = Dimensions.get('window');
 
@@ -17,6 +18,14 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useApp();
   const firstName = user?.name?.split(' ')[0] || 'Learner';
+  
+  const formattedDate = React.useMemo(() => {
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long'
+    }).toUpperCase();
+  }, []);
   
   const [banners, setBanners] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -86,7 +95,7 @@ export default function HomeScreen() {
     >
       <View style={styles.header}>
         <View>
-          <Text style={[styles.eyebrow, { color: colors.inkSubtle }]}>SUNDAY, 27 SEPTEMBER</Text>
+          <Text style={[styles.eyebrow, { color: colors.inkSubtle }]}>{formattedDate}</Text>
           <Text style={[styles.greeting, { color: colors.navy }]}>Hello, {firstName}</Text>
         </View>
         <View style={styles.headerActions}>
@@ -105,24 +114,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Banner Carousel */}
-      {banners.length > 0 && (
-        <View style={{ marginBottom: 28, height: 160 }}>
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
-            showsHorizontalScrollIndicator={false}
-            style={{ borderRadius: 16, overflow: 'hidden' }}
-          >
-            {banners.map((banner) => (
-              <Image 
-                key={banner.id} 
-                source={{ uri: banner.imageUrl }} 
-                style={{ width: width - 40, height: 160, resizeMode: 'cover' }} 
-              />
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      <BannerCarousel banners={banners} />
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.navy }]}>Explore your path</Text>
