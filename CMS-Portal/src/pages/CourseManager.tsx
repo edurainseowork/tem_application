@@ -29,9 +29,20 @@ type FormState = {
   originalPrice: string;
   categoryId: string;
   publishNow: boolean;
+  mentorName: string;
+  mentorExperience: string;
+  studentsEnrolled: string;
+  duration: string;
+  totalLessons: string;
 };
 
-const emptyForm: FormState = { title: '', description: '', price: '', originalPrice: '', categoryId: '', publishNow: false };
+const emptyForm: FormState = {
+  title: '', description: '', price: '', originalPrice: '', categoryId: '', publishNow: false,
+  mentorName: '', mentorExperience: '', studentsEnrolled: '', duration: '', totalLessons: '',
+};
+
+const toCount = (value: string) => (value.trim() === '' ? null : Math.round(Number(value)));
+const isValidCount = (value: string) => value.trim() === '' || (Number.isInteger(Number(value)) && Number(value) >= 0);
 
 export default function CourseManager({ courses, reloadCourses, showToast, onManageContent }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -43,6 +54,9 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
   const [form, setForm] = useState<FormState>(emptyForm);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [mentorPhotoFile, setMentorPhotoFile] = useState<File | null>(null);
+  const [mentorPhotoPreview, setMentorPhotoPreview] = useState<string | null>(null);
+  const [removeMentorPhoto, setRemoveMentorPhoto] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [busyCourseId, setBusyCourseId] = useState<number | null>(null);
 
@@ -62,6 +76,16 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     return () => URL.revokeObjectURL(url);
   }, [thumbnailFile]);
 
+  useEffect(() => {
+    if (!mentorPhotoFile) {
+      setMentorPhotoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(mentorPhotoFile);
+    setMentorPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [mentorPhotoFile]);
+
   const visibleCourses = useMemo(() => {
     const q = search.trim().toLowerCase();
     return courses.filter((c) =>
@@ -77,6 +101,8 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     setEditing(null);
     setForm(emptyForm);
     setThumbnailFile(null);
+    setMentorPhotoFile(null);
+    setRemoveMentorPhoto(false);
   };
 
   const startEdit = (course: AdminCourse) => {
@@ -88,8 +114,15 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
       originalPrice: course.originalPrice != null ? paiseToRupees(course.originalPrice) : '',
       categoryId: course.categoryId ? String(course.categoryId) : '',
       publishNow: course.isPublished,
+      mentorName: course.mentorName ?? '',
+      mentorExperience: course.mentorExperience ?? '',
+      studentsEnrolled: course.studentsEnrolled != null ? String(course.studentsEnrolled) : '',
+      duration: course.duration ?? '',
+      totalLessons: course.totalLessons != null ? String(course.totalLessons) : '',
     });
     setThumbnailFile(null);
+    setMentorPhotoFile(null);
+    setRemoveMentorPhoto(false);
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
@@ -105,6 +138,19 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     setThumbnailFile(file);
   };
 
+  const pickMentorPhoto = (file: File | null) => {
+    if (file && !ALLOWED_THUMBNAIL_TYPES.includes(file.type)) {
+      showToast('Mentor photo must be a PNG, JPEG or WEBP image', 'error');
+      return;
+    }
+    if (file && file.size > MAX_UPLOAD_BYTES) {
+      showToast('Mentor photo must be 500 KB or smaller', 'error');
+      return;
+    }
+    setMentorPhotoFile(file);
+    if (file) setRemoveMentorPhoto(false);
+  };
+
   const validate = (): string | null => {
     if (form.title.trim().length < 3) return 'Title must be at least 3 characters';
     if (form.description.trim().length < 10) return 'Description must be at least 10 characters';
@@ -115,6 +161,8 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
       const mrp = Number(form.originalPrice);
       if (!Number.isFinite(mrp) || mrp < price) return 'Original price must be greater than or equal to the price';
     }
+    if (!isValidCount(form.studentsEnrolled)) return 'Students enrolled must be a whole number';
+    if (!isValidCount(form.totalLessons)) return 'Total lessons must be a whole number';
     if (!editing && !thumbnailFile) return 'Please select a thumbnail';
     return null;
   };
@@ -128,6 +176,7 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     setIsSaving(true);
     try {
       const thumbnail = thumbnailFile ? await uploadFile(thumbnailFile) : undefined;
+      const mentorPhoto = mentorPhotoFile ? await uploadFile(mentorPhotoFile) : removeMentorPhoto ? null : undefined;
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
@@ -135,6 +184,12 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
         originalPrice: form.originalPrice === '' ? null : rupeesToPaise(form.originalPrice),
         categoryId: Number(form.categoryId),
         ...(thumbnail ? { thumbnail } : {}),
+        ...(mentorPhoto !== undefined ? { mentorPhoto } : {}),
+        mentorName: form.mentorName.trim() || null,
+        mentorExperience: form.mentorExperience.trim() || null,
+        studentsEnrolled: toCount(form.studentsEnrolled),
+        duration: form.duration.trim() || null,
+        totalLessons: toCount(form.totalLessons),
       };
 
       if (editing) {
@@ -295,6 +350,50 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
             <p style={{ fontSize: '0.75rem', color: '#ff5e5e', marginTop: '6px' }}>
               * Max size: 500 KB. Recommended: 1280x720 px (16:9) to prevent UI breaking.
             </p>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 'var(--space-md)' }}>
+            <h4 style={{ marginBottom: '4px' }}>Course Metrics</h4>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>Shown at the top of the course page in the app. Leave a field empty to hide it.</p>
+            <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Students Enrolled</label>
+                <input type="number" min="0" step="1" value={form.studentsEnrolled} onChange={e => update({ studentsEnrolled: e.target.value })} placeholder="2000" className="input-field" style={inputStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Course Duration</label>
+                <input type="text" maxLength={40} value={form.duration} onChange={e => update({ duration: e.target.value })} placeholder="e.g. 40 hours or 6 months" className="input-field" style={inputStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Total Lessons</label>
+                <input type="number" min="0" step="1" value={form.totalLessons} onChange={e => update({ totalLessons: e.target.value })} placeholder="42" className="input-field" style={inputStyle} />
+              </div>
+            </div>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 'var(--space-md)' }}>
+            <h4 style={{ marginBottom: 'var(--space-sm)' }}>Mentor</h4>
+            <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Mentor Name</label>
+                <input type="text" maxLength={80} value={form.mentorName} onChange={e => update({ mentorName: e.target.value })} placeholder="e.g. Debashish Banerjee" className="input-field" style={inputStyle} />
+              </div>
+              <div style={{ flex: 2 }}>
+                <label style={labelStyle}>Experience (one line)</label>
+                <input type="text" maxLength={120} value={form.mentorExperience} onChange={e => update({ mentorExperience: e.target.value })} placeholder="e.g. 15+ years teaching JEE Mathematics" className="input-field" style={inputStyle} />
+              </div>
+            </div>
+            <div style={{ marginTop: 'var(--space-md)' }}>
+              <label style={labelStyle}>Mentor Profile Photo (optional)</label>
+              <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center' }}>
+                <input type="file" accept="image/png, image/jpeg, image/webp" onChange={e => pickMentorPhoto(e.target.files?.[0] || null)} className="input-field" style={{ ...inputStyle, padding: '9px', cursor: 'pointer', flex: 1 }} />
+                {(mentorPhotoPreview || (!removeMentorPhoto && editing?.mentorPhoto)) && (
+                  <>
+                    <img src={mentorPhotoPreview || editing!.mentorPhoto!} alt="Mentor preview" style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '50%' }} />
+                    <button type="button" onClick={() => { setMentorPhotoFile(null); setRemoveMentorPhoto(true); }} className="btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', fontSize: '0.8rem' }}>Remove</button>
+                  </>
+                )}
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '6px' }}>Square image works best. Max 500 KB.</p>
+            </div>
           </div>
           {!editing && (
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }}>

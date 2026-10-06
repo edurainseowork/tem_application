@@ -19,6 +19,16 @@ const thumbnail = z
     "Thumbnail must be an uploaded image (/uploads/...) or an https URL",
   );
 
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .transform((v) => (v ? v : null));
+
+const optionalCount = z.number().int().min(0).max(10_000_000).nullable();
+
 const courseFields = {
   title: z.string().trim().min(3).max(150),
   description: z.string().trim().min(10).max(5000),
@@ -27,7 +37,14 @@ const courseFields = {
   thumbnail,
   categoryId: z.number().int().positive(),
   isPublished: z.boolean(),
+  mentorName: optionalText(80),
+  mentorExperience: optionalText(120),
+  mentorPhoto: thumbnail.nullable(),
+  studentsEnrolled: optionalCount,
+  duration: optionalText(40),
+  totalLessons: optionalCount,
 };
+
 
 function originalPriceNotBelowPrice(v: { price?: number; originalPrice?: number | null }) {
   return v.originalPrice == null || v.price === undefined || v.originalPrice >= v.price;
@@ -42,6 +59,12 @@ export const createCourseSchema = z
     ...courseFields,
     originalPrice: courseFields.originalPrice.optional(),
     isPublished: courseFields.isPublished.default(false),
+    mentorName: courseFields.mentorName.optional(),
+    mentorExperience: courseFields.mentorExperience.optional(),
+    mentorPhoto: courseFields.mentorPhoto.optional(),
+    studentsEnrolled: courseFields.studentsEnrolled.optional(),
+    duration: courseFields.duration.optional(),
+    totalLessons: courseFields.totalLessons.optional(),
   })
   .strict()
   .refine(originalPriceNotBelowPrice, originalPriceIssue);

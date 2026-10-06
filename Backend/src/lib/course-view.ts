@@ -14,6 +14,12 @@ export const publicCourseColumns = {
   category: coursesTable.category,
   categoryId: coursesTable.categoryId,
   categorySlug: categoriesTable.slug,
+  mentorName: coursesTable.mentorName,
+  mentorExperience: coursesTable.mentorExperience,
+  mentorPhoto: coursesTable.mentorPhoto,
+  studentsEnrolled: coursesTable.studentsEnrolled,
+  duration: coursesTable.duration,
+  totalLessons: coursesTable.totalLessons,
 };
 
 export const adminCourseColumns = {
@@ -27,6 +33,10 @@ export const adminCourseColumns = {
   enrollmentCount: sql<number>`(select count(*) from "user_courses" uc where uc."course_id" = "courses"."id")`.mapWith(Number),
 };
 
-export function withPublicThumbnail<T extends { thumbnail: string }>(course: T, req: Request): T {
-  return { ...course, thumbnail: toPublicUrl(course.thumbnail, req) };
+export function withPublicThumbnail<T extends { thumbnail: string; mentorPhoto?: string | null }>(course: T, req: Request): T {
+  return {
+    ...course,
+    thumbnail: toPublicUrl(course.thumbnail, req),
+    ...(course.mentorPhoto ? { mentorPhoto: toPublicUrl(course.mentorPhoto, req) } : {}),
+  };
 }

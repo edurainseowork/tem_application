@@ -34,6 +34,13 @@ export const coursesTable = pgTable("courses", {
   publishedAt: timestamp("published_at"),
   vimeoId: text("vimeo_id"), // Protected video
   pdfUrl: text("pdf_url"), // Protected notes
+    // Shown on the course page; all optional and managed from the CMS Course Manager
+  mentorName: text("mentor_name"),
+  mentorExperience: text("mentor_experience"), // one line, e.g. "15+ years teaching JEE Physics"
+  mentorPhoto: text("mentor_photo"), // "/uploads/<file>" or absolute https URL
+  studentsEnrolled: integer("students_enrolled"), // display figure set by admins
+  duration: text("duration"), // free text, e.g. "40 hours" or "6 months"
+  totalLessons: integer("total_lessons"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

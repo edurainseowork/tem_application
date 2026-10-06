@@ -22,6 +22,12 @@ export interface Course {
   category: string; // category name
   categoryId: number | null;
   categorySlug: string | null;
+    mentorName: string | null;
+  mentorExperience: string | null;
+  mentorPhoto: string | null; // absolute URL
+  studentsEnrolled: number | null;
+  duration: string | null;
+  totalLessons: number | null;
 }
 
 export interface Category {
