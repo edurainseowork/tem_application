@@ -3,17 +3,18 @@ import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
 import { API_BASE_URL, type CourseMentor } from '@/api/client';
-import { fetchPublicCoupons, redeemCoupon, validateCoupon } from '@/api/coupons';
+import { fetchPublicCoupons, validateCoupon } from '@/api/coupons';
 import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
 import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
 import { useNow } from '@/hooks/useNow';
-import { enrollInCourse } from '@/api/enrollments';
+import { createPaymentOrder, reportPaymentFailed, verifyPayment, type PaymentOrder, type RazorpaySuccess } from '@/api/payments';
+import { RazorpayCheckout } from '@/components/Payment/RazorpayCheckout';
 export default function CourseDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -62,6 +63,8 @@ export default function CourseDetailScreen() {
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [checkoutOrder, setCheckoutOrder] = useState<PaymentOrder | null>(null);
+  const [paymentMessage, setPaymentMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [publicCoupon, setPublicCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'content'>('content');
   const [courseContent, setCourseContent] = useState<any[]>([]);
@@ -139,30 +142,50 @@ export default function CourseDetailScreen() {
     }
   };
 
+  const completePurchase = async () => {
+    await purchaseCourse(course.id.toString());
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    setPaymentMessage({ text: 'Payment successful. Your course is unlocked!', ok: true });
+  };
+
+  // Razorpay flow: the backend creates the order (and sets the price), Razorpay takes the payment,
+  // then the backend verifies the signature before the course is unlocked
   const buyNow = async () => {
     if (!course || purchasing) return;
     setPurchasing(true);
+    setPaymentMessage(null);
     try {
-      // Use up the coupon before unlocking; it may have run out since it was applied
-      if (appliedCode) {
-        try {
-          await redeemCoupon(appliedCode, course.id);
-        } catch (e: any) {
-          clearCoupon(`${e.message || 'This coupon can no longer be used'}. Please review the price and try again.`);
-          return;
-        }
+      const order = await createPaymentOrder(course.id, appliedCode ?? undefined);
+      if (order.free) {
+        await completePurchase();
+        setPurchasing(false);
+        return;
       }
-      // Save the purchase on the backend too, so Go Live notifications reach this student
-      try {
-        await enrollInCourse(course.id);
-      } catch (e: any) {
-        Alert.alert('Enrollment not saved', `${e.message}. You may not receive live class notifications for this course.`);
-      }      
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await purchaseCourse(course.id.toString());
+      setCheckoutOrder(order); // opens Razorpay; purchasing stays true until it closes
+    } catch (e: any) {
+      if (appliedCode && /coupon/i.test(e.message || '')) clearCoupon(e.message);
+      setPaymentMessage({ text: e.message || 'Could not start the payment. Please try again.', ok: false });
+      setPurchasing(false);
+    }
+  };
+
+  const handlePaymentSuccess = async (result: RazorpaySuccess) => {
+    setCheckoutOrder(null);
+    try {
+      await verifyPayment(result);
+      await completePurchase();
+    } catch (e: any) {
+      setPaymentMessage({ text: `${e.message || 'Payment could not be verified'}. If money was deducted, contact support with payment ID ${result.razorpay_payment_id}.`, ok: false });
     } finally {
       setPurchasing(false);
     }
+  };
+
+  const handleCheckoutClosed = (lastError?: string) => {
+    if (checkoutOrder) reportPaymentFailed(checkoutOrder.orderId, lastError ?? 'Checkout closed');
+    setCheckoutOrder(null);
+    setPurchasing(false);
+    setPaymentMessage({ text: lastError ? `Payment failed: ${lastError}` : 'Payment cancelled.', ok: false });
   };
 
   const openExternal = (url: string) => Linking.openURL(url);
@@ -253,8 +276,10 @@ export default function CourseDetailScreen() {
               </View>
               <View style={styles.checkoutRow}>
                 <View><Text style={[styles.totalLabel, { color: colors.inkSubtle }]}>TOTAL TODAY</Text><Text style={[styles.totalPrice, { color: colors.navy }]}>{formatPrice((course.price - discount) / 100)} {course.originalPrice != null && course.originalPrice > course.price && <Text style={[styles.originalPrice, { color: colors.inkSubtle }]}>{formatPrice(course.originalPrice / 100)}</Text>}</Text></View>
-                <Pressable testID="buy-now-button" onPress={buyNow} disabled={purchasing} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed || purchasing ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>Buy now</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
+                <Pressable testID="buy-now-button" onPress={buyNow} disabled={purchasing} style={({ pressed }) => [styles.buyButton, { backgroundColor: colors.coral, opacity: pressed || purchasing ? 0.8 : 1 }]}><Text style={[styles.buyText, { color: colors.primaryForeground }]}>{purchasing ? 'Processing...' : 'Buy now'}</Text><Feather name="arrow-right" size={17} color={colors.primaryForeground} /></Pressable>
               </View>
+              {paymentMessage ? <Text style={[styles.couponMessage, { color: paymentMessage.ok ? colors.success : colors.destructive, textAlign: 'center' }]}>{paymentMessage.text}</Text> : null}
+              <RazorpayCheckout order={checkoutOrder} onSuccess={handlePaymentSuccess} onClose={handleCheckoutClosed} />
               <View style={styles.lockedNote}><Feather name="lock" size={13} color={colors.inkSubtle} /><Text style={[styles.lockedText, { color: colors.inkSubtle }]}>Notes, live classes, replays & tests unlock instantly.</Text></View>
             </>
           ) : (
