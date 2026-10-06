@@ -291,6 +291,29 @@ export default function CourseDetailScreen() {
                           </Text>
                         </>
                       )}
+                      <Pressable
+                        onPress={() =>
+                          router.push({
+                            pathname: '/course/[id]/content',
+                            params: { id: String(course.id), title: course.title },
+                          } as any)
+                        }
+                        style={{
+                          marginLeft: 'auto',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          backgroundColor: colors.coral,
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 7,
+                        }}
+                      >
+                        <Feather name="book-open" size={13} color="#ffffff" />
+                        <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#ffffff' }}>
+                          Open Curriculum
+                        </Text>
+                      </Pressable>
                     </View>
 
                     {courseContent.filter(c => c.parentId === currentFolderId).length === 0 ? (
@@ -300,8 +323,14 @@ export default function CourseDetailScreen() {
                         <Pressable 
                           key={item.id} 
                           onPress={() => {
-                            if (item.type === 'folder') setCurrentFolderId(item.id);
-                            else if (item.url) openExternal(item.url);
+                            if (item.type === 'folder') {
+                              setCurrentFolderId(item.id);
+                            } else {
+                              router.push({
+                                pathname: '/course/[id]/content',
+                                params: { id: String(course.id), title: course.title },
+                              } as any);
+                            }
                           }}
                           style={styles.contentRow}
                         >
@@ -312,7 +341,7 @@ export default function CourseDetailScreen() {
                             <Text style={[styles.contentTitle, { color: colors.navy }]}>{item.title}</Text>
                             <Text style={[styles.contentMeta, { color: colors.inkSubtle }]}>{item.type.toUpperCase()}</Text>
                           </View>
-                          <Feather name={item.type === 'folder' ? 'chevron-right' : 'external-link'} size={17} color={colors.inkSubtle} />
+                          <Feather name={item.type === 'folder' ? 'chevron-right' : 'arrow-up-right'} size={17} color={colors.inkSubtle} />
                         </Pressable>
                       ))
                     )}
