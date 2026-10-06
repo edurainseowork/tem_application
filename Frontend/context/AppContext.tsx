@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../api/client';
+import { fetchPurchasedCourseIds } from '../api/payments';
 
 type User = {
   uid: string;
@@ -104,6 +105,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => unsubscribe();
   }, []);
+
+  // Courses bought through Razorpay are stored on the server; merge them in after login
+  // so purchases show up on every device
+  useEffect(() => {
+    if (!user?.uid) return;
+    fetchPurchasedCourseIds()
+      .then((ids) => {
+        if (ids.length === 0) return;
+        setPurchasedCourses((current) => {
+          const merged = Array.from(new Set([...current, ...ids.map(String)]));
+          if (merged.length !== current.length) persistPurchases(merged).catch(() => undefined);
+          return merged;
+        });
+      })
+      .catch(() => undefined);
+  }, [user?.uid]);
 
   const persistPurchases = async (nextPurchasedCourses: string[]) => {
     await AsyncStorage.setItem(

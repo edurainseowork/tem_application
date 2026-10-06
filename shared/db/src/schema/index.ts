@@ -123,6 +123,25 @@ export const userCoursesTable = pgTable("user_courses", {
 });
 
 // Live classes are hosted on Google Meet; we only store the link and schedule.
+// One row per Razorpay order. The server decides user, course, amount and coupon when the order is
+// created; payment verification only trusts this row, never values sent by the app.
+export const paymentsTable = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: 'cascade' }).notNull(),
+  courseId: integer("course_id").references(() => coursesTable.id, { onDelete: 'cascade' }).notNull(),
+  razorpayOrderId: text("razorpay_order_id").notNull().unique(),
+  razorpayPaymentId: text("razorpay_payment_id"),
+  amount: integer("amount").notNull(), // paise, after coupon
+  currency: text("currency").default("INR").notNull(),
+  couponId: integer("coupon_id").references(() => couponsTable.id, { onDelete: 'set null' }),
+  status: text("status").default("created").notNull(), // 'created' | 'paid' | 'failed'
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("payments_user_id_idx").on(table.userId),
+]);
+
 export const liveClassesTable = pgTable("live_classes", {
   id: serial("id").primaryKey(),
   courseId: integer("course_id").references(() => coursesTable.id, { onDelete: 'cascade' }).notNull(),
@@ -199,3 +218,4 @@ export type LiveClass = typeof liveClassesTable.$inferSelect;
 export type Notification = typeof notificationsTable.$inferSelect;
 export type Coupon = typeof couponsTable.$inferSelect;
 export type AdminNotification = typeof adminNotificationsTable.$inferSelect;
+export type Payment = typeof paymentsTable.$inferSelect;
