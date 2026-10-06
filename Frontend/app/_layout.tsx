@@ -5,6 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/Shared/ErrorBoundary';
 import { AppProvider } from '@/context/AppContext';
+import { PushNotificationsManager } from '@/components/Shared/PushNotificationsManager';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -56,6 +57,7 @@ export default function RootLayout() {
           <AppProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
+                <PushNotificationsManager />
                 <RootLayoutNav />
               </KeyboardProvider>
             </GestureHandlerRootView>

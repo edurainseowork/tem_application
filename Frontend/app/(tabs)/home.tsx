@@ -5,6 +5,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View, Dimensions } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CATEGORIES, type Category as CategoryStyle } from '@/constants/data';
 import { fetchNotifications } from '@/api/liveClasses';
+import { fetchAdminNotifications, getLastSeenAdminNotificationId } from '@/api/adminNotifications';
 import { API_BASE_URL, fetchCategories } from '@/api/client';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
@@ -27,9 +28,15 @@ export default function HomeScreen() {
     React.useCallback(() => {
       if (!user) return;
       const loadUnread = () => {
-        fetchNotifications()
-          .then((data) => setUnreadCount(data.filter((notification) => !notification.isRead).length))
-          .catch((e) => console.warn('Notifications fetch error:', e.message));
+        // Badge = unread live class notifications + admin notifications newer than the last one seen
+        Promise.allSettled([fetchNotifications(), fetchAdminNotifications(), getLastSeenAdminNotificationId()])
+          .then(([live, admin, seen]) => {
+            const liveUnread = live.status === 'fulfilled' ? live.value.filter((notification) => !notification.isRead).length : 0;
+            const lastSeen = seen.status === 'fulfilled' ? seen.value : 0;
+            const adminNew = admin.status === 'fulfilled' ? admin.value.filter((notification) => notification.id > lastSeen).length : 0;
+            setUnreadCount(liveUnread + adminNew);
+            if (live.status === 'rejected') console.warn('Notifications fetch error:', live.reason?.message);
+          });
       };
       loadUnread();
       const interval = setInterval(loadUnread, 5000);

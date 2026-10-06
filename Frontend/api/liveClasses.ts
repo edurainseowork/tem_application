@@ -28,6 +28,8 @@ export interface AppNotification {
 export const JOIN_EARLY_MINUTES = 10;
 
 const authFetch = async (path: string, init: RequestInit = {}) => {
+    // After a page reload Firebase restores the saved login asynchronously; wait for it
+    await auth.authStateReady()
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw new Error('Not signed in');
   const res = await fetch(`${API_BASE_URL}/api${path}`, {

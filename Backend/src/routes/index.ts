@@ -13,6 +13,7 @@ import adminRouter from "./admin/index.js";
 import liveClassesRouter from "./liveClasses.js";
 import notificationsRouter from "./notifications.js";
 import enrollmentsRouter from "./enrollments.js";
+import adminNotificationsRouter from "./adminNotifications.js";
 
 const router = Router();
 
@@ -31,5 +32,7 @@ router.use("/enrollments", enrollmentsRouter);
 // Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
 router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);
+// Admin notifications for the app (separate from the live class notifications above)
+router.use("/admin-notifications", adminNotificationsRouter);
 
 export default router;

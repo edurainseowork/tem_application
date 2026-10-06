@@ -33,6 +33,13 @@
         {
           "iCloudContainerEnvironment": "Production"
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ff6b4a",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {
