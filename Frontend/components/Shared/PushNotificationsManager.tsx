@@ -1,9 +1,25 @@
-import * as Notifications from 'expo-notifications';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useApp } from '@/context/AppContext';
-import { registerForPushNotifications } from '@/utils/pushNotifications';
+
+// Expo Go (SDK 53+) dropped Android push support and expo-notifications throws as soon as it is
+// loaded there. This component sits in the root _layout, so a static import would take down the
+// whole app in Expo Go. Push therefore only runs in a development/production build, and the
+// library is loaded lazily with require() so Expo Go never evaluates it.
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+type NotificationsModule = typeof import('expo-notifications');
+
+function loadNotifications(): NotificationsModule | null {
+  try {
+    return require('expo-notifications') as NotificationsModule;
+  } catch (e: any) {
+    console.warn('Push notifications unavailable:', e?.message ?? e);
+    return null;
+  }
+}
 
 /**
  * Registers the device for admin push notifications once a user is signed in, and opens the
@@ -11,21 +27,33 @@ import { registerForPushNotifications } from '@/utils/pushNotifications';
  */
 export function PushNotificationsManager() {
   const { user } = useApp();
-  const lastResponse = Notifications.useLastNotificationResponse();
   const handledResponseId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!user || Platform.OS === 'web') return;
-    registerForPushNotifications().catch((e) => console.warn('Push registration failed:', e?.message ?? e));
-  }, [user?.uid]);
+    if (!user || Platform.OS === 'web' || isExpoGo) return;
 
-  useEffect(() => {
-    if (!user || !lastResponse) return;
-    const id = lastResponse.notification.request.identifier;
-    if (handledResponseId.current === id) return;
-    handledResponseId.current = id;
-    router.push('/notifications');
-  }, [lastResponse, user?.uid]);
+    const Notifications = loadNotifications();
+    if (!Notifications) return;
+
+    const { registerForPushNotifications } = require('@/utils/pushNotifications') as typeof import('@/utils/pushNotifications');
+    registerForPushNotifications().catch((e) => console.warn('Push registration failed:', e?.message ?? e));
+
+    const openNotifications = (response: { notification: { request: { identifier: string } } } | null) => {
+      if (!response) return;
+      const id = response.notification.request.identifier;
+      if (handledResponseId.current === id) return;
+      handledResponseId.current = id;
+      router.push('/notifications');
+    };
+
+    // A tap that launched the app, then any later taps while it runs
+    Notifications.getLastNotificationResponseAsync()
+      .then(openNotifications)
+      .catch(() => undefined);
+    const subscription = Notifications.addNotificationResponseReceivedListener(openNotifications);
+
+    return () => subscription.remove();
+  }, [user?.uid]);
 
   return null;
 }
