@@ -13,6 +13,7 @@
 
 import { auth } from '../firebase';
 import { API_BASE_URL, ApiError } from '../api';
+import * as tus from 'tus-js-client';
 
 export interface PresignedUrlResponse {
   uploadUrl: string;
@@ -236,8 +237,102 @@ export async function uploadMediaToS3(
   return { fileUrl, key };
 }
 
+export interface VimeoUploadMetadata {
+  title?: string;
+  description?: string;
+}
+
+export interface VimeoUploadResult {
+  vimeoVideoId: string;
+  playerUrl: string;
+}
+
+/**
+ * Direct client-to-Vimeo resumable video upload via tus protocol.
+ * Conforms to Vimeo API v3.4 direct resumable uploads.
+ * 
+ * @param file The video file to upload directly to Vimeo
+ * @param metadata Optional video metadata (title, description)
+ * @param onProgressCallback Optional progress callback (0-100)
+ * @param signal Optional AbortSignal to cancel upload
+ */
+export async function uploadTeacherVideo(
+  file: File,
+  metadata: VimeoUploadMetadata = {},
+  onProgressCallback?: ProgressCallback,
+  signal?: AbortSignal
+): Promise<VimeoUploadResult> {
+  const token = await auth.currentUser?.getIdToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Step A: Request Vimeo upload ticket from backend
+  const backendRes = await fetch(`${API_BASE_URL}/api/videos/initiate-upload`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      title: metadata.title || file.name.replace(/\.[^/.]+$/, ''),
+      description: metadata.description || '',
+      fileSize: file.size,
+    }),
+  });
+
+  const resData = await backendRes.json().catch(() => ({}));
+  if (!backendRes.ok || !resData.uploadLink) {
+    throw new Error(resData?.error || `Could not obtain Vimeo upload link (${backendRes.status})`);
+  }
+
+  const { uploadLink, vimeoVideoId } = resData;
+
+  // Step B: Direct resumable upload to Vimeo via tus
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      return reject(new Error('Upload aborted by caller'));
+    }
+
+    const upload = new tus.Upload(file, {
+      uploadUrl: uploadLink,
+      endpoint: uploadLink,
+      retryDelays: [0, 3000, 5000, 10000],
+      chunkSize: 5 * 1024 * 1024, // 5MB chunks (optimal for browser uploads)
+      onError: (error) => {
+        console.error('Vimeo Tus Upload failed:', error);
+        reject(error);
+      },
+      onProgress: (bytesUploaded, bytesTotal) => {
+        const percentage = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
+        if (onProgressCallback) {
+          onProgressCallback(Number(percentage));
+        }
+      },
+      onSuccess: () => {
+        console.log('Upload complete. Vimeo Video ID:', vimeoVideoId);
+        resolve({
+          vimeoVideoId,
+          playerUrl: `https://player.vimeo.com/video/${vimeoVideoId}`,
+        });
+      },
+    });
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        upload.abort();
+        reject(new Error('Upload was cancelled'));
+      });
+    }
+
+    upload.start();
+  });
+}
+
 export default {
   getUploadPresignedUrl,
   uploadFileWithProgress,
   uploadMediaToS3,
+  uploadTeacherVideo,
 };
+
