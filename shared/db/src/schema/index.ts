@@ -21,6 +21,13 @@ export const categoriesTable = pgTable("categories", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type CourseMentor = {
+  name: string;
+  experience: string | null; // one line, e.g. "15+ years teaching JEE Physics"
+  photo: string | null;
+};
+
+
 export const coursesTable = pgTable("courses", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -35,9 +42,8 @@ export const coursesTable = pgTable("courses", {
   vimeoId: text("vimeo_id"), // Protected video
   pdfUrl: text("pdf_url"), // Protected notes
     // Shown on the course page; all optional and managed from the CMS Course Manager
-  mentorName: text("mentor_name"),
-  mentorExperience: text("mentor_experience"), // one line, e.g. "15+ years teaching JEE Physics"
-  mentorPhoto: text("mentor_photo"), // "/uploads/<file>" or absolute https URL
+  // One or more mentors: photo is "/uploads/<file>" or an absolute https URL
+  mentors: jsonb("mentors").$type<CourseMentor[]>().default([]).notNull(),
   studentsEnrolled: integer("students_enrolled"), // display figure set by admins
   duration: text("duration"), // free text, e.g. "40 hours" or "6 months"
   totalLessons: integer("total_lessons"),

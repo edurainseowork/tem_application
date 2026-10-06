@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import { sql } from "drizzle-orm";
-import { categoriesTable, coursesTable } from "@workspace/db/schema";
+// import { categoriesTable, coursesTable } from "@workspace/db/schema";
+import { categoriesTable, coursesTable, type CourseMentor } from "@workspace/db/schema";
 import { toPublicUrl } from "./media";
 
 // Explicit column list: protected fields (vimeoId, pdfUrl) are never selected for the catalog.
@@ -14,9 +15,7 @@ export const publicCourseColumns = {
   category: coursesTable.category,
   categoryId: coursesTable.categoryId,
   categorySlug: categoriesTable.slug,
-  mentorName: coursesTable.mentorName,
-  mentorExperience: coursesTable.mentorExperience,
-  mentorPhoto: coursesTable.mentorPhoto,
+    mentors: coursesTable.mentors,
   studentsEnrolled: coursesTable.studentsEnrolled,
   duration: coursesTable.duration,
   totalLessons: coursesTable.totalLessons,
@@ -33,10 +32,12 @@ export const adminCourseColumns = {
   enrollmentCount: sql<number>`(select count(*) from "user_courses" uc where uc."course_id" = "courses"."id")`.mapWith(Number),
 };
 
-export function withPublicThumbnail<T extends { thumbnail: string; mentorPhoto?: string | null }>(course: T, req: Request): T {
+export function withPublicThumbnail<T extends { thumbnail: string; mentors?: CourseMentor[] | null }>(course: T, req: Request): T {
   return {
     ...course,
     thumbnail: toPublicUrl(course.thumbnail, req),
-    ...(course.mentorPhoto ? { mentorPhoto: toPublicUrl(course.mentorPhoto, req) } : {}),
+    ...(course.mentors
+      ? { mentors: course.mentors.map((m) => ({ ...m, photo: m.photo ? toPublicUrl(m.photo, req) : null })) }
+      : {}),
   };
 }

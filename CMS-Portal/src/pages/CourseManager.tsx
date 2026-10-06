@@ -8,6 +8,7 @@ import {
   MAX_UPLOAD_BYTES,
   type AdminCourse,
   type Category,
+  type CourseMentor,
 } from '../api'
 
 const inputStyle: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' };
@@ -29,8 +30,6 @@ type FormState = {
   originalPrice: string;
   categoryId: string;
   publishNow: boolean;
-  mentorName: string;
-  mentorExperience: string;
   studentsEnrolled: string;
   duration: string;
   totalLessons: string;
@@ -38,8 +37,21 @@ type FormState = {
 
 const emptyForm: FormState = {
   title: '', description: '', price: '', originalPrice: '', categoryId: '', publishNow: false,
-  mentorName: '', mentorExperience: '', studentsEnrolled: '', duration: '', totalLessons: '',
+  studentsEnrolled: '', duration: '', totalLessons: '',
 };
+
+// One editable mentor row: `photo` is the saved URL, `photoFile` a newly picked image
+type MentorRow = { key: number; name: string; experience: string; photo: string | null; photoFile: File | null; photoPreview: string | null };
+
+let mentorKey = 0;
+const newMentorRow = (m?: CourseMentor): MentorRow => ({
+  key: ++mentorKey,
+  name: m?.name ?? '',
+  experience: m?.experience ?? '',
+  photo: m?.photo ?? null,
+  photoFile: null,
+  photoPreview: null,
+});
 
 const toCount = (value: string) => (value.trim() === '' ? null : Math.round(Number(value)));
 const isValidCount = (value: string) => value.trim() === '' || (Number.isInteger(Number(value)) && Number(value) >= 0);
@@ -54,9 +66,7 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
   const [form, setForm] = useState<FormState>(emptyForm);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  const [mentorPhotoFile, setMentorPhotoFile] = useState<File | null>(null);
-  const [mentorPhotoPreview, setMentorPhotoPreview] = useState<string | null>(null);
-  const [removeMentorPhoto, setRemoveMentorPhoto] = useState(false);
+  const [mentors, setMentors] = useState<MentorRow[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [busyCourseId, setBusyCourseId] = useState<number | null>(null);
 
@@ -76,15 +86,21 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     return () => URL.revokeObjectURL(url);
   }, [thumbnailFile]);
 
-  useEffect(() => {
-    if (!mentorPhotoFile) {
-      setMentorPhotoPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(mentorPhotoFile);
-    setMentorPhotoPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [mentorPhotoFile]);
+  const updateMentor = (key: number, patch: Partial<MentorRow>) =>
+    setMentors((rows) => rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+
+  const removeMentor = (key: number) =>
+    setMentors((rows) => {
+      const row = rows.find((r) => r.key === key);
+      if (row?.photoPreview) URL.revokeObjectURL(row.photoPreview);
+      return rows.filter((r) => r.key !== key);
+    });
+
+  const clearMentors = () =>
+    setMentors((rows) => {
+      rows.forEach((row) => row.photoPreview && URL.revokeObjectURL(row.photoPreview));
+      return [];
+    });
 
   const visibleCourses = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -101,8 +117,7 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     setEditing(null);
     setForm(emptyForm);
     setThumbnailFile(null);
-    setMentorPhotoFile(null);
-    setRemoveMentorPhoto(false);
+    clearMentors();
   };
 
   const startEdit = (course: AdminCourse) => {
@@ -114,15 +129,13 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
       originalPrice: course.originalPrice != null ? paiseToRupees(course.originalPrice) : '',
       categoryId: course.categoryId ? String(course.categoryId) : '',
       publishNow: course.isPublished,
-      mentorName: course.mentorName ?? '',
-      mentorExperience: course.mentorExperience ?? '',
       studentsEnrolled: course.studentsEnrolled != null ? String(course.studentsEnrolled) : '',
       duration: course.duration ?? '',
       totalLessons: course.totalLessons != null ? String(course.totalLessons) : '',
     });
     setThumbnailFile(null);
-    setMentorPhotoFile(null);
-    setRemoveMentorPhoto(false);
+    clearMentors();
+    setMentors((course.mentors ?? []).map(newMentorRow));
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
@@ -138,17 +151,23 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     setThumbnailFile(file);
   };
 
-  const pickMentorPhoto = (file: File | null) => {
-    if (file && !ALLOWED_THUMBNAIL_TYPES.includes(file.type)) {
+  const pickMentorPhoto = (row: MentorRow, file: File | null) => {
+    if (!file) return;
+    if (!ALLOWED_THUMBNAIL_TYPES.includes(file.type)) {
       showToast('Mentor photo must be a PNG, JPEG or WEBP image', 'error');
       return;
     }
-    if (file && file.size > MAX_UPLOAD_BYTES) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       showToast('Mentor photo must be 500 KB or smaller', 'error');
       return;
     }
-    setMentorPhotoFile(file);
-    if (file) setRemoveMentorPhoto(false);
+    if (row.photoPreview) URL.revokeObjectURL(row.photoPreview);
+    updateMentor(row.key, { photoFile: file, photoPreview: URL.createObjectURL(file) });
+  };
+
+  const removeMentorPhoto = (row: MentorRow) => {
+    if (row.photoPreview) URL.revokeObjectURL(row.photoPreview);
+    updateMentor(row.key, { photo: null, photoFile: null, photoPreview: null });
   };
 
   const validate = (): string | null => {
@@ -163,6 +182,7 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     }
     if (!isValidCount(form.studentsEnrolled)) return 'Students enrolled must be a whole number';
     if (!isValidCount(form.totalLessons)) return 'Total lessons must be a whole number';
+    if (mentors.some((m) => !m.name.trim() && (m.experience.trim() || m.photo || m.photoFile))) return 'Every mentor needs a name';
     if (!editing && !thumbnailFile) return 'Please select a thumbnail';
     return null;
   };
@@ -176,7 +196,15 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
     setIsSaving(true);
     try {
       const thumbnail = thumbnailFile ? await uploadFile(thumbnailFile) : undefined;
-      const mentorPhoto = mentorPhotoFile ? await uploadFile(mentorPhotoFile) : removeMentorPhoto ? null : undefined;
+      const mentorList: CourseMentor[] = [];
+      for (const m of mentors) {
+        if (!m.name.trim()) continue; // blank rows are ignored
+        mentorList.push({
+          name: m.name.trim(),
+          experience: m.experience.trim() || null,
+          photo: m.photoFile ? await uploadFile(m.photoFile) : m.photo,
+        });
+      }
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
@@ -184,9 +212,7 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
         originalPrice: form.originalPrice === '' ? null : rupeesToPaise(form.originalPrice),
         categoryId: Number(form.categoryId),
         ...(thumbnail ? { thumbnail } : {}),
-        ...(mentorPhoto !== undefined ? { mentorPhoto } : {}),
-        mentorName: form.mentorName.trim() || null,
-        mentorExperience: form.mentorExperience.trim() || null,
+        mentors: mentorList,
         studentsEnrolled: toCount(form.studentsEnrolled),
         duration: form.duration.trim() || null,
         totalLessons: toCount(form.totalLessons),
@@ -370,29 +396,38 @@ export default function CourseManager({ courses, reloadCourses, showToast, onMan
             </div>
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 'var(--space-md)' }}>
-            <h4 style={{ marginBottom: 'var(--space-sm)' }}>Mentor</h4>
-            <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
-              <div style={{ flex: 1 }}>
-                <label style={labelStyle}>Mentor Name</label>
-                <input type="text" maxLength={80} value={form.mentorName} onChange={e => update({ mentorName: e.target.value })} placeholder="e.g. Debashish Banerjee" className="input-field" style={inputStyle} />
-              </div>
-              <div style={{ flex: 2 }}>
-                <label style={labelStyle}>Experience (one line)</label>
-                <input type="text" maxLength={120} value={form.mentorExperience} onChange={e => update({ mentorExperience: e.target.value })} placeholder="e.g. 15+ years teaching JEE Mathematics" className="input-field" style={inputStyle} />
-              </div>
-            </div>
-            <div style={{ marginTop: 'var(--space-md)' }}>
-              <label style={labelStyle}>Mentor Profile Photo (optional)</label>
-              <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center' }}>
-                <input type="file" accept="image/png, image/jpeg, image/webp" onChange={e => pickMentorPhoto(e.target.files?.[0] || null)} className="input-field" style={{ ...inputStyle, padding: '9px', cursor: 'pointer', flex: 1 }} />
-                {(mentorPhotoPreview || (!removeMentorPhoto && editing?.mentorPhoto)) && (
-                  <>
-                    <img src={mentorPhotoPreview || editing!.mentorPhoto!} alt="Mentor preview" style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '50%' }} />
-                    <button type="button" onClick={() => { setMentorPhotoFile(null); setRemoveMentorPhoto(true); }} className="btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', fontSize: '0.8rem' }}>Remove</button>
-                  </>
-                )}
-              </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '6px' }}>Square image works best. Max 500 KB.</p>
+            <h4 style={{ marginBottom: '4px' }}>Mentors</h4>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>Shown under "Your Mentor" on the course page, in this order. Photo is optional (square, max 500 KB).</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+              {mentors.map((mentor, index) => (
+                <div key={mentor.key} style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'flex-start', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ width: '64px', flexShrink: 0, textAlign: 'center' }}>
+                    {mentor.photoPreview || mentor.photo ? (
+                      <img src={mentor.photoPreview || mentor.photo!} alt="" style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', color: 'var(--text-secondary)' }}>{mentor.name.trim()[0]?.toUpperCase() || '?'}</div>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                      <input type="text" maxLength={80} value={mentor.name} onChange={e => updateMentor(mentor.key, { name: e.target.value })} placeholder={`Mentor ${index + 1} name`} className="input-field" style={{ ...inputStyle, flex: 1 }} />
+                      <input type="text" maxLength={120} value={mentor.experience} onChange={e => updateMentor(mentor.key, { experience: e.target.value })} placeholder="Experience (one line), e.g. 15+ years teaching JEE Maths" className="input-field" style={{ ...inputStyle, flex: 2 }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
+                      <input type="file" accept="image/png, image/jpeg, image/webp" onChange={e => { pickMentorPhoto(mentor, e.target.files?.[0] || null); e.target.value = ''; }} className="input-field" style={{ ...inputStyle, padding: '7px', cursor: 'pointer', flex: 1 }} />
+                      {(mentor.photoPreview || mentor.photo) && (
+                        <button type="button" onClick={() => removeMentorPhoto(mentor)} className="btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', fontSize: '0.8rem' }}>Remove photo</button>
+                      )}
+                      <button type="button" onClick={() => removeMentor(mentor.key)} className="btn" style={{ background: '#ff5e5e', border: 'none', padding: '6px 12px', fontSize: '0.8rem' }}>Remove mentor</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {mentors.length < 10 && (
+                <button type="button" onClick={() => setMentors((rows) => [...rows, newMentorRow()])} className="btn" style={{ alignSelf: 'flex-start', background: 'transparent', border: '1px solid var(--accent-primary)', color: 'var(--accent-primary)', padding: '6px 14px' }}>
+                  + Add mentor
+                </button>
+              )}
             </div>
           </div>
           {!editing && (

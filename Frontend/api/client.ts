@@ -11,6 +11,11 @@ if (__DEV__ && Constants.expoConfig?.hostUri) {
   }
 }
 console.log("DEBUG: API_BASE_URL is resolved to ->", API_BASE_URL);
+export interface CourseMentor {
+  name: string;
+  experience: string | null;
+  photo: string | null; // absolute URL
+}
 
 export interface Course {
   id: number;
