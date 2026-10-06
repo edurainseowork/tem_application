@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
-import { API_BASE_URL } from '@/api/client';
+import { API_BASE_URL, type CourseMentor } from '@/api/client';
 import { fetchPublicCoupons, redeemCoupon, validateCoupon } from '@/api/coupons';
 import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
 import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
@@ -183,6 +183,8 @@ export default function CourseDetailScreen() {
       </View>
     );
   }
+    const mentors: CourseMentor[] = Array.isArray(course.mentors) ? course.mentors.filter((m: CourseMentor) => m?.name) : [];
+
   const metrics: { icon: 'users' | 'clock' | 'layers'; value: string; label: string }[] = [
     course.studentsEnrolled != null && { icon: 'users' as const, value: Number(course.studentsEnrolled).toLocaleString('en-IN'), label: 'Students enrolled' },
     course.duration && { icon: 'clock' as const, value: String(course.duration), label: 'Duration' },
@@ -219,18 +221,22 @@ export default function CourseDetailScreen() {
           <View style={[styles.aboutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.cardTitle, { color: colors.navy }]}>About this course</Text>
             <Text style={[styles.description, { color: colors.inkSubtle }]}>{course.description}</Text>
-                        {course.mentorName ? (
-              <View style={[styles.instructorRow, { borderTopColor: colors.border }]}>
-                {course.mentorPhoto ? (
-                  <Image source={{ uri: course.mentorPhoto }} style={styles.instructorPhoto} />
-                ) : (
-                  <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone as keyof typeof colors] as string }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{course.mentorName[0].toUpperCase()}</Text></View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.instructorLabel, { color: colors.inkSubtle }]}>YOUR MENTOR</Text>
-                  <Text style={[styles.instructorName, { color: colors.navy }]}>{course.mentorName}</Text>
-                  {course.mentorExperience ? <Text style={[styles.instructorExperience, { color: colors.inkSubtle }]} numberOfLines={2}>{course.mentorExperience}</Text> : null}
-                </View>
+                        {mentors.length > 0 ? (
+              <View style={[styles.mentorSection, { borderTopColor: colors.border }]}>
+                <Text style={[styles.instructorLabel, { color: colors.inkSubtle }]}>{mentors.length > 1 ? 'YOUR MENTORS' : 'YOUR MENTOR'}</Text>
+                {mentors.map((mentor, index) => (
+                  <View key={`${mentor.name}-${index}`} style={styles.instructorRow}>
+                    {mentor.photo ? (
+                      <Image source={{ uri: mentor.photo }} style={styles.instructorPhoto} />
+                    ) : (
+                      <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone as keyof typeof colors] as string }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{mentor.name[0]?.toUpperCase()}</Text></View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.instructorName, { color: colors.navy }]}>{mentor.name}</Text>
+                      {mentor.experience ? <Text style={[styles.instructorExperience, { color: colors.inkSubtle }]} numberOfLines={2}>{mentor.experience}</Text> : null}
+                    </View>
+                  </View>
+                ))}
               </View>
             ) : null}
           </View>
@@ -341,7 +347,8 @@ const styles = StyleSheet.create({
   aboutCard: { borderWidth: 1, borderRadius: 20, padding: 17, marginBottom: 14 },
   cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   description: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 19, marginTop: 10 },
-  instructorRow: { borderTopWidth: 1, marginTop: 16, paddingTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+    mentorSection: { borderTopWidth: 1, marginTop: 16, paddingTop: 14, gap: 12 },
+  instructorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     instructorAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   instructorPhoto: { width: 44, height: 44, borderRadius: 22 },
   instructorExperience: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 16, marginTop: 2 },
@@ -351,7 +358,7 @@ const styles = StyleSheet.create({
   metricLabel: { fontFamily: 'Inter_400Regular', fontSize: 10, textAlign: 'center' },
   instructorInitial: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   instructorLabel: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.6 },
-  instructorName: { fontFamily: 'Inter_600SemiBold', fontSize: 12, marginTop: 3 },
+    instructorName: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   couponCard: { borderRadius: 20, padding: 17, marginBottom: 17 },
   couponHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   couponHint: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 5 },

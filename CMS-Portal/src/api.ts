@@ -55,6 +55,11 @@ export type Category = {
   sortOrder: number;
   courseCount: number;
 };
+export type CourseMentor = {
+  name: string;
+  experience: string | null;
+  photo: string | null; // absolute URL
+};
 
 export type AdminCourse = {
   id: number;
@@ -71,9 +76,7 @@ export type AdminCourse = {
   createdAt: string;
   updatedAt: string;
   enrollmentCount: number;
-    mentorName: string | null;
-  mentorExperience: string | null;
-  mentorPhoto: string | null; // absolute URL
+    mentors: CourseMentor[]; // absolute URL
   studentsEnrolled: number | null;
   duration: string | null;
   totalLessons: number | null;

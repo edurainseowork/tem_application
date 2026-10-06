@@ -29,6 +29,23 @@ const optionalText = (max: number) =>
 
 const optionalCount = z.number().int().min(0).max(10_000_000).nullable();
 
+
+// The CMS sends back the photo URLs it was given (absolute, e.g. http://host/uploads/x.png);
+// store our own uploads as server-relative paths again.
+const OWN_UPLOAD_URL_RE = /^https?:\/\/[^/]+(\/uploads\/[A-Za-z0-9-]+\.(?:png|jpe?g|webp))$/;
+const mentorPhoto = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().replace(OWN_UPLOAD_URL_RE, "$1") : v),
+  thumbnail.nullable(),
+);
+
+const mentor = z
+  .object({
+    name: z.string().trim().min(1, "Mentor name is required").max(80),
+    experience: optionalText(120).default(null),
+    photo: mentorPhoto.default(null),
+  })
+  .strict();
+
 const courseFields = {
   title: z.string().trim().min(3).max(150),
   description: z.string().trim().min(10).max(5000),
@@ -37,9 +54,7 @@ const courseFields = {
   thumbnail,
   categoryId: z.number().int().positive(),
   isPublished: z.boolean(),
-  mentorName: optionalText(80),
-  mentorExperience: optionalText(120),
-  mentorPhoto: thumbnail.nullable(),
+  mentors: z.array(mentor).max(10),
   studentsEnrolled: optionalCount,
   duration: optionalText(40),
   totalLessons: optionalCount,
@@ -59,9 +74,7 @@ export const createCourseSchema = z
     ...courseFields,
     originalPrice: courseFields.originalPrice.optional(),
     isPublished: courseFields.isPublished.default(false),
-    mentorName: courseFields.mentorName.optional(),
-    mentorExperience: courseFields.mentorExperience.optional(),
-    mentorPhoto: courseFields.mentorPhoto.optional(),
+        mentors: courseFields.mentors.default([]),
     studentsEnrolled: courseFields.studentsEnrolled.optional(),
     duration: courseFields.duration.optional(),
     totalLessons: courseFields.totalLessons.optional(),
