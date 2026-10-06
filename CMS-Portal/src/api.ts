@@ -71,6 +71,12 @@ export type AdminCourse = {
   createdAt: string;
   updatedAt: string;
   enrollmentCount: number;
+    mentorName: string | null;
+  mentorExperience: string | null;
+  mentorPhoto: string | null; // absolute URL
+  studentsEnrolled: number | null;
+  duration: string | null;
+  totalLessons: number | null;
 };
 
 export const MAX_UPLOAD_BYTES = 500 * 1024;

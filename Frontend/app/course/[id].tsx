@@ -38,16 +38,11 @@ export default function CourseDetailScreen() {
       })
       .then(data => {
         if (!data.error) {
+          // Mentor and metrics come from the CMS (Course Manager); empty ones are hidden.
           setCourse({
             ...data,
             subtitle: data.category + " Mastery",
-            instructor: "Expert Mentor",
-            validity: "12 months access",
-            lessons: 42,
-            students: "2k+ students",
-            originalPrice: Math.round((data.price || 0) * 1.5),
             tone: 'coral',
-            duration: "40 hours"
           });
         }
         setLoading(false);
@@ -188,6 +183,11 @@ export default function CourseDetailScreen() {
       </View>
     );
   }
+  const metrics: { icon: 'users' | 'clock' | 'layers'; value: string; label: string }[] = [
+    course.studentsEnrolled != null && { icon: 'users' as const, value: Number(course.studentsEnrolled).toLocaleString('en-IN'), label: 'Students enrolled' },
+    course.duration && { icon: 'clock' as const, value: String(course.duration), label: 'Duration' },
+    course.totalLessons != null && { icon: 'layers' as const, value: String(course.totalLessons), label: 'Lessons' },
+  ].filter(Boolean) as { icon: 'users' | 'clock' | 'layers'; value: string; label: string }[];
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -198,25 +198,41 @@ export default function CourseDetailScreen() {
           <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.card }]}>
             <Feather name="arrow-left" size={20} color={colors.navy} />
           </Pressable>
-          <View style={styles.coverMeta}><Text style={[styles.coverCategory, { color: colors.primaryForeground }]}>{course.category.toUpperCase()} · {course.duration}</Text></View>
+          {/* <View style={styles.coverMeta}><Text style={[styles.coverCategory, { color: colors.primaryForeground }]}>{course.category.toUpperCase()} · {course.duration}</Text></View> */}
         </View>
         <View style={styles.body}>
           <View style={styles.titleRow}>
             <View style={{ flex: 1 }}><Text style={[styles.title, { color: colors.navy }]}>{course.title}</Text><Text style={[styles.subtitle, { color: colors.inkSubtle }]}>{course.subtitle}</Text></View>
             {unlocked ? <View style={[styles.unlockedBadge, { backgroundColor: colors.mint }]}><Feather name="unlock" size={13} color={colors.success} /><Text style={[styles.unlockedText, { color: colors.success }]}>Unlocked</Text></View> : null}
           </View>
-          <View style={styles.statsRow}>
-            <View style={styles.stat}><Feather name="user" size={15} color={colors.coral} /><Text style={[styles.statText, { color: colors.inkSubtle }]}>{course.students}</Text></View>
-            <View style={styles.stat}><Feather name="clock" size={15} color={colors.coral} /><Text style={[styles.statText, { color: colors.inkSubtle }]}>{course.validity}</Text></View>
-            <View style={styles.stat}><Feather name="layers" size={15} color={colors.coral} /><Text style={[styles.statText, { color: colors.inkSubtle }]}>{course.lessons} lessons</Text></View>
-          </View>
+                    {metrics.length > 0 && (
+            <View style={styles.metricsRow}>
+              {metrics.map((metric) => (
+                <View key={metric.label} style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Feather name={metric.icon} size={16} color={colors.coral} />
+                  <Text style={[styles.metricValue, { color: colors.navy }]} numberOfLines={1}>{metric.value}</Text>
+                  <Text style={[styles.metricLabel, { color: colors.inkSubtle }]}>{metric.label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
           <View style={[styles.aboutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.cardTitle, { color: colors.navy }]}>About this course</Text>
             <Text style={[styles.description, { color: colors.inkSubtle }]}>{course.description}</Text>
-            <View style={[styles.instructorRow, { borderTopColor: colors.border }]}>
-              <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone as keyof typeof colors] as string }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{course.instructor[0]}</Text></View>
-              <View><Text style={[styles.instructorLabel, { color: colors.inkSubtle }]}>YOUR MENTOR</Text><Text style={[styles.instructorName, { color: colors.navy }]}>{course.instructor}</Text></View>
-            </View>
+                        {course.mentorName ? (
+              <View style={[styles.instructorRow, { borderTopColor: colors.border }]}>
+                {course.mentorPhoto ? (
+                  <Image source={{ uri: course.mentorPhoto }} style={styles.instructorPhoto} />
+                ) : (
+                  <View style={[styles.instructorAvatar, { backgroundColor: colors[course.tone as keyof typeof colors] as string }]}><Text style={[styles.instructorInitial, { color: colors.primaryForeground }]}>{course.mentorName[0].toUpperCase()}</Text></View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.instructorLabel, { color: colors.inkSubtle }]}>YOUR MENTOR</Text>
+                  <Text style={[styles.instructorName, { color: colors.navy }]}>{course.mentorName}</Text>
+                  {course.mentorExperience ? <Text style={[styles.instructorExperience, { color: colors.inkSubtle }]} numberOfLines={2}>{course.mentorExperience}</Text> : null}
+                </View>
+              </View>
+            ) : null}
           </View>
 
           {!unlocked ? (
@@ -311,8 +327,8 @@ const styles = StyleSheet.create({
   cover: { width: '100%', height: '100%' },
   imageOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(20,33,61,0.18)' },
   backButton: { position: 'absolute', top: 54, left: 19, width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  coverMeta: { position: 'absolute', left: 20, bottom: 18 },
-  coverCategory: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1 },
+  // coverMeta: { position: 'absolute', left: 20, bottom: 18 },
+  // coverCategory: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1 },
   body: { paddingHorizontal: 20, paddingTop: 22 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start' },
   title: { fontFamily: 'Inter_700Bold', fontSize: 28, lineHeight: 33, letterSpacing: -1 },
@@ -326,7 +342,13 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   description: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 19, marginTop: 10 },
   instructorRow: { borderTopWidth: 1, marginTop: 16, paddingTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  instructorAvatar: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    instructorAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  instructorPhoto: { width: 44, height: 44, borderRadius: 22 },
+  instructorExperience: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 16, marginTop: 2 },
+  metricsRow: { flexDirection: 'row', gap: 10, marginTop: 18, marginBottom: 20 },
+  metricCard: { flex: 1, borderWidth: 1, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 10, alignItems: 'center', gap: 4 },
+  metricValue: { fontFamily: 'Inter_700Bold', fontSize: 16, marginTop: 2 },
+  metricLabel: { fontFamily: 'Inter_400Regular', fontSize: 10, textAlign: 'center' },
   instructorInitial: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   instructorLabel: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.6 },
   instructorName: { fontFamily: 'Inter_600SemiBold', fontSize: 12, marginTop: 3 },

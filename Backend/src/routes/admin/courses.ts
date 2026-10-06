@@ -89,6 +89,12 @@ router.post("/", async (req, res) => {
       category: category.name,
       isPublished: input.isPublished,
       publishedAt: input.isPublished ? now : null,
+            mentorName: input.mentorName ?? null,
+      mentorExperience: input.mentorExperience ?? null,
+      mentorPhoto: input.mentorPhoto ?? null,
+      studentsEnrolled: input.studentsEnrolled ?? null,
+      duration: input.duration ?? null,
+      totalLessons: input.totalLessons ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -129,6 +135,12 @@ router.patch("/:id", async (req, res) => {
     if (input.price !== undefined) patch.price = input.price;
     if (input.originalPrice !== undefined) patch.originalPrice = input.originalPrice;
     if (input.thumbnail !== undefined) patch.thumbnail = input.thumbnail;
+        if (input.mentorName !== undefined) patch.mentorName = input.mentorName;
+    if (input.mentorExperience !== undefined) patch.mentorExperience = input.mentorExperience;
+    if (input.mentorPhoto !== undefined) patch.mentorPhoto = input.mentorPhoto;
+    if (input.studentsEnrolled !== undefined) patch.studentsEnrolled = input.studentsEnrolled;
+    if (input.duration !== undefined) patch.duration = input.duration;
+    if (input.totalLessons !== undefined) patch.totalLessons = input.totalLessons;
     if (input.categoryId !== undefined) {
       const category = await requireCategory(tx, input.categoryId);
       patch.categoryId = category.id;
