@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ScreenCapture from 'expo-screen-capture';
 
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
@@ -95,6 +96,40 @@ export function CourseContentScreen({
   useEffect(() => {
     loadOfflineCacheIndex();
   }, [loadOfflineCacheIndex]);
+
+  // Activate DRM Anti-Screenshot & Screen Recording Protection (PRD Section 6.5 & Section 12)
+  useEffect(() => {
+    let sub: ScreenCapture.Subscription | null = null;
+
+    if (selectedPdf || selectedVideo) {
+      // 1. Enable OS-level screen capture prevention (Android FLAG_SECURE / iOS recording prevention)
+      ScreenCapture.preventScreenCaptureAsync('drm-protected-content').catch((err) => {
+        console.warn('[ScreenCapture] Failed to prevent screen capture:', err);
+      });
+
+      // 2. Listen for screenshot capture events to alert student
+      try {
+        sub = ScreenCapture.addScreenshotListener(() => {
+          Alert.alert(
+            'Security Warning',
+            'Screenshots and screen recordings of copyrighted course materials are strictly prohibited.',
+            [{ text: 'I Understand' }]
+          );
+        });
+      } catch (e) {
+        // Fallback for environments without screenshot event support
+      }
+    } else {
+      ScreenCapture.allowScreenCaptureAsync('drm-protected-content').catch(() => {});
+    }
+
+    return () => {
+      if (sub) {
+        sub.remove();
+      }
+      ScreenCapture.allowScreenCaptureAsync('drm-protected-content').catch(() => {});
+    };
+  }, [selectedPdf, selectedVideo]);
 
   // Fetch Course Contents for Current Folder Level
   const loadContents = useCallback(
@@ -612,43 +647,52 @@ export function CourseContentScreen({
             {/* In-App PDF Rendering via WebView */}
             <View style={styles.webViewWrap}>
               {(selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url) ? (
-                <WebView
-                  source={{
-                    uri: Platform.OS === 'android'
-                      ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
-                          selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url || ''
-                        )}`
-                      : (selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url || ''),
-                  }}
-                  style={styles.webView}
-                  startInLoadingState
-                  renderLoading={() => (
-                    <View style={styles.webViewLoading}>
-                      <ActivityIndicator size="large" color={colors.coral} />
-                      <Text style={{ marginTop: 10, color: colors.inkSubtle, fontSize: 13 }}>
-                        Loading document securely...
-                      </Text>
-                    </View>
-                  )}
-                  originWhitelist={['*']}
-                  javaScriptEnabled
-                  domStorageEnabled
-                  allowFileAccess={false}
-                  allowUniversalAccessFromFileURLs={false}
-                  onShouldStartLoadWithRequest={(req) => {
-                    // Strictly block external file downloads / external navigation
-                    if (
-                      req.url.includes('docs.google.com') ||
-                      req.url.includes('.pdf') ||
-                      req.url.includes('amazonaws.com') ||
-                      req.url.startsWith('blob:') ||
-                      req.url.startsWith('data:')
-                    ) {
-                      return true;
-                    }
-                    return false;
-                  }}
-                />
+                <>
+                  <WebView
+                    source={{
+                      uri: Platform.OS === 'android'
+                        ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
+                            selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url || ''
+                          )}`
+                        : (selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url || ''),
+                    }}
+                    style={styles.webView}
+                    startInLoadingState
+                    renderLoading={() => (
+                      <View style={styles.webViewLoading}>
+                        <ActivityIndicator size="large" color={colors.coral} />
+                        <Text style={{ marginTop: 10, color: colors.inkSubtle, fontSize: 13 }}>
+                          Loading document securely...
+                        </Text>
+                      </View>
+                    )}
+                    originWhitelist={['*']}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    allowFileAccess={false}
+                    allowUniversalAccessFromFileURLs={false}
+                    onShouldStartLoadWithRequest={(req) => {
+                      // Strictly block external file downloads / external navigation
+                      if (
+                        req.url.includes('docs.google.com') ||
+                        req.url.includes('.pdf') ||
+                        req.url.includes('amazonaws.com') ||
+                        req.url.startsWith('blob:') ||
+                        req.url.startsWith('data:')
+                      ) {
+                        return true;
+                      }
+                      return false;
+                    }}
+                  />
+
+                  {/* Dynamic Floating Watermark Overlay (PRD Section 6.5) */}
+                  <View pointerEvents="none" style={styles.pdfWatermarkOverlay}>
+                    <Text style={styles.pdfWatermarkText}>{watermarkText}</Text>
+                    <Text style={styles.pdfWatermarkText}>{watermarkText}</Text>
+                    <Text style={styles.pdfWatermarkText}>{watermarkText}</Text>
+                  </View>
+                </>
               ) : (
                 <View style={styles.centerBox}>
                   <Feather name="file-text" size={38} color={colors.inkSubtle} />
@@ -720,70 +764,82 @@ export function CourseContentScreen({
 
             {/* In-App Protected Video Player via Sandboxed HTML5 WebView */}
             <View style={styles.videoContainer}>
-              {selectedVideo.mediaUrl ? (
-                <WebView
-                  style={styles.videoWebView}
-                  originWhitelist={['*']}
-                  allowsInlineMediaPlayback
-                  mediaPlaybackRequiresUserAction={false}
-                  javaScriptEnabled
-                  domStorageEnabled
-                  source={{
-                    html: `
-                      <!DOCTYPE html>
-                      <html>
-                      <head>
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                        <style>
-                          * { margin: 0; padding: 0; box-sizing: border-box; }
-                          body {
-                            background-color: #0b0f19;
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            height: 100vh;
-                            overflow: hidden;
-                            user-select: none;
-                            -webkit-user-select: none;
+              {selectedVideo.mediaUrl ? (() => {
+                const urlStr = selectedVideo.mediaUrl.trim();
+                const isVimeo = urlStr.includes('vimeo.com') || /^\d+$/.test(urlStr);
+                let vimeoEmbedUrl = '';
+                if (isVimeo) {
+                  const cleaned = urlStr.split('?')[0].split('#')[0];
+                  const vimeoId = cleaned.split('/').filter(Boolean).pop() || '';
+                  vimeoEmbedUrl = vimeoId ? `https://player.vimeo.com/video/${vimeoId}?badge=0&autopause=0&player_id=0&autoplay=1` : '';
+                }
+
+                return (
+                  <WebView
+                    style={styles.videoWebView}
+                    originWhitelist={['*']}
+                    allowsInlineMediaPlayback
+                    mediaPlaybackRequiresUserAction={false}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    source={{
+                      html: `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                          <style>
+                            * { margin: 0; padding: 0; box-sizing: border-box; }
+                            body {
+                              background-color: #0b0f19;
+                              display: flex;
+                              justify-content: center;
+                              align-items: center;
+                              height: 100vh;
+                              overflow: hidden;
+                              user-select: none;
+                              -webkit-user-select: none;
+                            }
+                            iframe, video {
+                              width: 100%;
+                              height: 100%;
+                              max-height: 100vh;
+                              border: none;
+                              outline: none;
+                            }
+                            video {
+                              object-fit: contain;
+                            }
+                            .watermark {
+                              position: fixed;
+                              top: 25%;
+                              left: 18%;
+                              color: rgba(255, 255, 255, 0.16);
+                              font-size: 14px;
+                              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                              font-weight: 600;
+                              pointer-events: none;
+                              z-index: 9999;
+                              transform: rotate(-20deg);
+                              letter-spacing: 1px;
+                            }
+                          </style>
+                        </head>
+                        <body oncontextmenu="return false;">
+                          <div class="watermark">${watermarkText}</div>
+                          ${
+                            isVimeo && vimeoEmbedUrl
+                              ? `<iframe src="${vimeoEmbedUrl}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`
+                              : `<video src="${selectedVideo.mediaUrl}" controls controlsList="nodownload noplaybackrate" playsinline autoplay></video>`
                           }
-                          video {
-                            width: 100%;
-                            height: 100%;
-                            max-height: 100vh;
-                            object-fit: contain;
-                            outline: none;
-                          }
-                          .watermark {
-                            position: fixed;
-                            top: 25%;
-                            left: 18%;
-                            color: rgba(255, 255, 255, 0.16);
-                            font-size: 14px;
-                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                            font-weight: 600;
-                            pointer-events: none;
-                            z-index: 9999;
-                            transform: rotate(-20deg);
-                            letter-spacing: 1px;
-                          }
-                        </style>
-                      </head>
-                      <body oncontextmenu="return false;">
-                        <div class="watermark">${watermarkText}</div>
-                        <video
-                          src="${selectedVideo.mediaUrl}"
-                          controls
-                          controlsList="nodownload noplaybackrate"
-                          playsinline
-                          autoplay
-                        ></video>
-                      </body>
-                      </html>
-                    `,
-                  }}
-                  onShouldStartLoadWithRequest={() => true}
-                />
-              ) : (
+                        </body>
+                        </html>
+                      `,
+                    }}
+                    onShouldStartLoadWithRequest={() => true}
+                  />
+                );
+              })() : (
                 <View style={styles.centerBox}>
                   <Feather name="video-off" size={40} color="#94a3b8" />
                   <Text style={[styles.centerTitle, { color: '#ffffff' }]}>Video Unavailable</Text>
@@ -1117,6 +1173,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
+  },
+  pdfWatermarkOverlay: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 50,
+    zIndex: 99,
+  },
+  pdfWatermarkText: {
+    fontSize: 14,
+    color: 'rgba(0, 0, 0, 0.12)',
+    fontFamily: 'Inter_700Bold',
+    transform: [{ rotate: '-25deg' }],
+    letterSpacing: 1,
   },
   drmFooter: {
     flexDirection: 'row',
