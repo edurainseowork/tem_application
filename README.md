@@ -40,3 +40,12 @@ This will start the Expo bundler. Press `w` to open it in a web browser, or use 
 
 ## Note
 Make sure the backend is always running before you test the mobile app or the CMS, otherwise the data will not load.
+
+## Recent Updates (Oct 7 - Gauransh's Profile & Coupon Update)
+Gauransh has completed the **Profile Section** and fixed the **Coupon Bug**. 
+**IMPORTANT:** Before running the backend, you must run the database extension/migration to add the new profile fields to your database. 
+Run the following command in your terminal:
+```bash
+psql "$DATABASE_URL" -f shared/db/migrations/0005_user_profile.sql
+```
+*(Make sure to run this extension command carefully so the new profile features work without crashing).*
