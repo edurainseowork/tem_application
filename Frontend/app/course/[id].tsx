@@ -15,6 +15,7 @@ import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
 import { useNow } from '@/hooks/useNow';
 import { createPaymentOrder, reportPaymentFailed, verifyPayment, type PaymentOrder, type RazorpaySuccess } from '@/api/payments';
 import { RazorpayCheckout } from '@/components/Payment/RazorpayCheckout';
+import { KeyboardAwareScrollViewCompat } from '@/components/Shared/KeyboardAwareScrollViewCompat';
 export default function CourseDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -216,7 +217,12 @@ export default function CourseDetailScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 28 }} showsVerticalScrollIndicator={false}>
+            {/* Scrolls the focused coupon field above the keyboard (bottomOffset keeps Apply and the message visible too) */}
+      <KeyboardAwareScrollViewCompat
+        contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
+        showsVerticalScrollIndicator={false}
+        bottomOffset={110}
+      >
         <View style={styles.imageWrap}>
           <Image source={{ uri: course.thumbnail }} style={styles.cover} />
           <View style={styles.imageOverlay} />
@@ -269,7 +275,7 @@ export default function CourseDetailScreen() {
               <View style={[styles.couponCard, { backgroundColor: colors.accent }]}>
                 <View style={styles.couponHeader}><View><Text style={[styles.cardTitle, { color: colors.navy }]}>Have a coupon?</Text><Text style={[styles.couponHint, { color: colors.inkSubtle }]}>{publicCoupon ? `Try ${publicCoupon.code} for ${publicCoupon.discountPercent}% off` : 'Enter your code to get a discount'}</Text></View><Feather name="tag" size={20} color={colors.coral} /></View>
                 <View style={styles.couponInputRow}>
-                  <TextInput value={coupon} onChangeText={(text) => { setCoupon(text); if (appliedCode) clearCoupon(''); }} placeholder="Enter code" placeholderTextColor={colors.inkSubtle} autoCapitalize="characters" style={[styles.couponInput, { color: colors.navy, borderColor: colors.input, backgroundColor: colors.card }]} />
+                  <TextInput value={coupon} onChangeText={(text) => { setCoupon(text); if (appliedCode) clearCoupon(''); }} placeholder="Enter code" placeholderTextColor={colors.inkSubtle} autoCapitalize="characters"  autoCorrect={false} returnKeyType="done" onSubmitEditing={applyCoupon} style={[styles.couponInput, { color: colors.navy, borderColor: colors.input, backgroundColor: colors.card }]} />
                   <Pressable onPress={applyCoupon} disabled={applyingCoupon} style={[styles.applyButton, { backgroundColor: colors.navy, opacity: applyingCoupon ? 0.7 : 1 }]}><Text style={[styles.applyText, { color: colors.primaryForeground }]}>{applyingCoupon ? '...' : 'Apply'}</Text></Pressable>
                 </View>
                 {couponMessage ? <Text style={[styles.couponMessage, { color: couponValid ? colors.success : colors.destructive }]}>{couponMessage}</Text> : null}
@@ -376,7 +382,7 @@ export default function CourseDetailScreen() {
             </>
           )}
         </View>
-      </ScrollView>
+            </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
