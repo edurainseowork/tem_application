@@ -11,7 +11,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../api/client';
-import { recordStreakActivity } from '../api/profile';
+import { fetchProfile, recordStreakActivity } from '../api/profile';
 import { fetchPurchasedCourseIds } from '../api/payments';
 
 type User = {
@@ -20,6 +20,8 @@ type User = {
   email: string | null;
   role?: string | null;
   isAdminOrFaculty?: boolean;
+    /** Profile picture URL (S3), shown on the home screen avatar */
+  photo?: string | null;
 };
 
 type AppContextValue = {
@@ -36,7 +38,7 @@ type AppContextValue = {
   purchaseCourse: (courseId: string) => Promise<void>;
     isPurchased: (courseId: string) => boolean;
   /** Updates the signed-in user's details in memory (e.g. after editing the profile). */
-  updateUser: (patch: Partial<Pick<User, 'name' | 'email'>>) => void;
+  updateUser: (patch: Partial<Pick<User, 'name' | 'email' | 'photo'>>) => void;
 };
 
 // The day streak is recorded at most this often while the app stays in the foreground
@@ -115,13 +117,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
   
   // Stable identity, and a no-op when nothing changed, so screens can call it after every refresh
-  const updateUser = useCallback((patch: Partial<Pick<User, 'name' | 'email'>>) => {
+  const updateUser = useCallback((patch: Partial<Pick<User, 'name' | 'email' | 'photo'>>) => {
     setUser((current) => {
       if (!current) return current;
       const changed = (Object.keys(patch) as (keyof typeof patch)[]).some((key) => patch[key] !== current[key]);
       return changed ? { ...current, ...patch } : current;
     });
   }, []);
+    // Load the profile picture once per login so the home screen avatar shows it without opening Profile
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+    fetchProfile()
+      .then((profile) => {
+        if (!cancelled) updateUser({ photo: profile.profilePhoto });
+      })
+      .catch(() => undefined); // offline: the avatar falls back to the initial
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, updateUser]);
 
   // Day streak: tell the backend the student is active when they log in / open the app and
   // whenever the app returns to the foreground (the backend counts each day only once).
