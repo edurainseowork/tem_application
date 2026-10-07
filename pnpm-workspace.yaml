@@ -28,7 +28,7 @@
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
-
+  - expo-image-manipulator@57.0.21
 packages:
   - Frontend
   - Backend

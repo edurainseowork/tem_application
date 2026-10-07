@@ -14,6 +14,7 @@ import liveClassesRouter from "./liveClasses.js";
 import notificationsRouter from "./notifications.js";
 import enrollmentsRouter from "./enrollments.js";
 import adminNotificationsRouter from "./adminNotifications.js";
+import profileRouter from "./profile.js"
 import vimeoRouter from "./vimeo.routes.js";
 
 const router = Router();
@@ -28,6 +29,8 @@ router.use("/content", contentRouter);
 router.use("/upload", uploadRouter);
 router.use("/banners", bannersRouter);
 router.use("/auth", authRouter);
+// The signed-in student's own profile, photo and day streak
+router.use("/profile", profileRouter);
 router.use("/stats", statsRouter);
 router.use("/enrollments", enrollmentsRouter);
 // Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id

@@ -1,0 +1,5 @@
+import type { Router } from "express";
+
+// Types for the plain-JavaScript Vimeo routes (vimeo.routes.js), so TypeScript files can import them
+declare const router: Router;
+export default router;
