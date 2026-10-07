@@ -10,6 +10,7 @@ import { rateLimit } from "../middlewares/security";
 import { HttpError } from "../lib/http-error";
 import { UPLOAD_DIR } from "../lib/media";
 import { logger } from "../lib/logger";
+import { uploadPublicImage } from "../lib/s3";
 
 const router = Router();
 
@@ -86,6 +87,19 @@ router.post(
     if (req.file) {
       const ext = detectFileType(req.file.buffer);
       if (!ext) throw new HttpError(400, "Only PNG, JPEG, WEBP images or PDF files are allowed");
+      
+      // Images (course thumbnails, mentor photos, banners) go to S3 so they survive redeploys and
+      // are served by S3 instead of this server. Falls back to local disk when S3 is not configured.
+      if (ext !== "pdf" && process.env.AWS_S3_BUCKET_NAME) {
+        try {
+          const url = await uploadPublicImage(req.file.buffer, ext, "images");
+          logger.info({ adminUid: req.auth?.uid, url, size: req.file.size }, "Image uploaded to S3");
+          res.status(201).json({ success: true, url, type: ext });
+          return;
+        } catch (err) {
+          logger.error({ err }, "S3 image upload failed, storing locally instead");
+        }
+      }
 
       const filename = `${crypto.randomUUID()}.${ext}`;
       await fs.promises.writeFile(path.join(UPLOAD_DIR, filename), req.file.buffer, { flag: "wx" });

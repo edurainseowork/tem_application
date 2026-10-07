@@ -67,6 +67,19 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   name: text("name"),
   role: varchar("role", { length: 50 }).default("student"),
+  // Profile details the student can edit from the app's Profile tab
+  phone: varchar("phone", { length: 20 }),
+  gender: varchar("gender", { length: 20 }), // 'male' | 'female' | 'other' | 'prefer_not_to_say'
+  address: text("address"),
+  city: varchar("city", { length: 80 }),
+  state: varchar("state", { length: 80 }),
+  pincode: varchar("pincode", { length: 10 }),
+  profilePhoto: text("profile_photo"), // public S3 URL
+  // Day streak (see Backend/src/lib/streak.ts)
+  streakCount: integer("streak_count").default(0).notNull(),
+  longestStreak: integer("longest_streak").default(0).notNull(),
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

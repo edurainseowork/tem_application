@@ -127,7 +127,9 @@ function App() {
     setIsUploadingBanner(true);
     try {
       // Banners store absolute URLs (the banners API predates server-relative paths).
-      const imageUrl = API_BASE_URL + await uploadFile(bannerFile);
+            // Images now come back as full S3 URLs; older local uploads are server-relative paths
+      const uploadedUrl = await uploadFile(bannerFile);
+      const imageUrl = uploadedUrl.startsWith('/') ? API_BASE_URL + uploadedUrl : uploadedUrl;
 
       const data = await apiFetch('/banners', { method: 'POST', body: { imageUrl } });
       if (data.success) {
