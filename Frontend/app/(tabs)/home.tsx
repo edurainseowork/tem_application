@@ -32,6 +32,9 @@ export default function HomeScreen() {
   // Category cards come from the CMS; icons/tones cycle through the built-in styles.
   const [categoryCards, setCategoryCards] = React.useState<{ id: string; label: string; icon: CategoryStyle['icon']; tone: CategoryStyle['tone'] }[]>([]);
   const [unreadCount, setUnreadCount] = React.useState(0);
+    // Falls back to the initial if the photo cannot be loaded; retried when the photo changes
+  const [avatarFailed, setAvatarFailed] = React.useState(false);
+  React.useEffect(() => setAvatarFailed(false), [user?.photo]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -107,8 +110,12 @@ export default function HomeScreen() {
               </View>
             )}
           </Pressable>
-          <Pressable style={[styles.avatar, { backgroundColor: colors.navy }]} onPress={() => router.push('/(tabs)/profile')}>
-            <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{firstName.slice(0, 1).toUpperCase()}</Text>
+                    <Pressable style={[styles.avatar, { backgroundColor: colors.navy }]} onPress={() => router.push('/(tabs)/profile')}>
+            {user?.photo && !avatarFailed ? (
+              <Image source={{ uri: user.photo }} style={styles.avatarImage} onError={() => setAvatarFailed(true)} />
+            ) : (
+              <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{firstName.slice(0, 1).toUpperCase()}</Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -153,7 +160,8 @@ const styles = StyleSheet.create({
   bell: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   bellBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
   bellBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 9 },
-  avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+    avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarImage: { width: 42, height: 42 },
   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 17 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, letterSpacing: -0.3 },

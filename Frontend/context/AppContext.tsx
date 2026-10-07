@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -10,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../api/client';
+import { fetchProfile, recordStreakActivity } from '../api/profile';
 import { fetchPurchasedCourseIds } from '../api/payments';
 
 type User = {
@@ -18,6 +20,8 @@ type User = {
   email: string | null;
   role?: string | null;
   isAdminOrFaculty?: boolean;
+    /** Profile picture URL (S3), shown on the home screen avatar */
+  photo?: string | null;
 };
 
 type AppContextValue = {
@@ -32,8 +36,14 @@ type AppContextValue = {
   sendPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
   purchaseCourse: (courseId: string) => Promise<void>;
-  isPurchased: (courseId: string) => boolean;
+    isPurchased: (courseId: string) => boolean;
+  /** Updates the signed-in user's details in memory (e.g. after editing the profile). */
+  updateUser: (patch: Partial<Pick<User, 'name' | 'email' | 'photo'>>) => void;
 };
+
+// The day streak is recorded at most this often while the app stays in the foreground
+const STREAK_PING_INTERVAL_MS = 10 * 60 * 1000;
+
 
 const STORAGE_KEY = 'studysprint-state';
 const AppContext = createContext<AppContextValue | null>(null);
@@ -105,6 +115,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => unsubscribe();
   }, []);
+  
+  // Stable identity, and a no-op when nothing changed, so screens can call it after every refresh
+  const updateUser = useCallback((patch: Partial<Pick<User, 'name' | 'email' | 'photo'>>) => {
+    setUser((current) => {
+      if (!current) return current;
+      const changed = (Object.keys(patch) as (keyof typeof patch)[]).some((key) => patch[key] !== current[key]);
+      return changed ? { ...current, ...patch } : current;
+    });
+  }, []);
+    // Load the profile picture once per login so the home screen avatar shows it without opening Profile
+  useEffect(() => {
+    if (!user?.uid) return;
+    let cancelled = false;
+    fetchProfile()
+      .then((profile) => {
+        if (!cancelled) updateUser({ photo: profile.profilePhoto });
+      })
+      .catch(() => undefined); // offline: the avatar falls back to the initial
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, updateUser]);
+
+  // Day streak: tell the backend the student is active when they log in / open the app and
+  // whenever the app returns to the foreground (the backend counts each day only once).
+  const lastStreakPing = useRef(0);
+  useEffect(() => {
+    if (!user?.uid) return;
+    const ping = () => {
+      if (Date.now() - lastStreakPing.current < STREAK_PING_INTERVAL_MS) return;
+      lastStreakPing.current = Date.now();
+      recordStreakActivity().catch(() => {
+        lastStreakPing.current = 0; // retry on the next foreground
+      });
+    };
+    lastStreakPing.current = 0;
+    ping();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') ping();
+    });
+    return () => subscription.remove();
+  }, [user?.uid]);
 
   // Courses bought through Razorpay are stored on the server; merge them in after login
   // so purchases show up on every device
@@ -222,6 +274,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await persistPurchases(nextPurchasedCourses);
       },
       isPurchased: (courseId) => purchasedCourses.includes(courseId),
+            updateUser,
     }),
     [isReady, purchasedCourses, user],
   );

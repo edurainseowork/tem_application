@@ -1,6 +1,5 @@
 import crypto from "crypto";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 // Dedicated bucket for admin notification images (AWS_S3_BUCKET_NOTIFICATION in .env), separate from the
 // course media bucket used by routes/upload.ts. Objects must be publicly readable: phones download
 // push notification images without credentials.
@@ -40,4 +39,17 @@ export async function uploadPublicImage(buffer: Buffer, type: ImageType, folder:
     CacheControl: "public, max-age=31536000, immutable",
   }));
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+}
+
+/**
+ * Deletes an image previously returned by uploadPublicImage. Only URLs in our bucket under `folder/`
+ * are touched, so a URL coming from elsewhere can never delete other objects.
+ */
+export async function deletePublicImage(url: string, folder: string): Promise<void> {
+  if (!bucket) return;
+  const prefix = `https://${bucket}.s3.${region}.amazonaws.com/${folder}/`;
+  if (!url.startsWith(prefix)) return;
+  const key = url.slice(`https://${bucket}.s3.${region}.amazonaws.com/`.length);
+  if (!/^[A-Za-z0-9/_-]+\.(png|jpg|webp)$/.test(key)) return;
+  await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
