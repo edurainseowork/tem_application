@@ -67,6 +67,7 @@
     "expo-device": "~57.0.2",
     "expo-document-picker": "~57.0.3",
     "expo-notifications": "~57.0.21",
+    "expo-screen-capture": "^57.0.3",
     "firebase": "^12.19.0",
     "react": "19.2.3",
     "react-native": "0.86.3",

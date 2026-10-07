@@ -14,6 +14,7 @@ import liveClassesRouter from "./liveClasses.js";
 import notificationsRouter from "./notifications.js";
 import enrollmentsRouter from "./enrollments.js";
 import adminNotificationsRouter from "./adminNotifications.js";
+import vimeoRouter from "./vimeo.routes.js";
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);
 // Admin notifications for the app (separate from the live class notifications above)
 router.use("/admin-notifications", adminNotificationsRouter);
+router.use(vimeoRouter);
 
 export default router;
