@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch, type AdminCourse } from '../api';
-import { getUploadPresignedUrl, uploadFileWithProgress } from '../services/uploadService';
+import { getUploadPresignedUrl, uploadFileWithProgress, uploadTeacherVideo } from '../services/uploadService';
 
 export type ContentType = 'folder' | 'video' | 'pdf' | 'note';
 
@@ -405,24 +405,40 @@ export default function CourseContentManager({
     abortControllerRef.current = abortController;
 
     try {
-      // Step A: Request S3 Presigned URL
-      const mimeType = (uploadFile.type || (uploadType === 'pdf' ? 'application/pdf' : 'video/mp4')).toLowerCase().trim().split(';')[0];
-      const presigned = await getUploadPresignedUrl(
-        uploadFile.name,
-        mimeType,
-        activeCourseId
-      );
+      let finalMediaUrl = '';
 
-      // Step B: Stream Raw Binary to S3 with Progress & explicit Content-Type match
-      await uploadFileWithProgress(
-        presigned.uploadUrl,
-        uploadFile,
-        (percent) => {
-          setUploadProgress(percent);
-        },
-        abortController.signal,
-        mimeType
-      );
+      if (uploadType === 'video') {
+        // Stream directly to Vimeo via tus resumable upload protocol
+        const vimeoRes = await uploadTeacherVideo(
+          uploadFile,
+          { title: uploadTitle.trim() },
+          (percent) => {
+            setUploadProgress(percent);
+          },
+          abortController.signal
+        );
+        finalMediaUrl = vimeoRes.playerUrl;
+      } else {
+        // Step A: Request S3 Presigned URL for PDF
+        const mimeType = (uploadFile.type || 'application/pdf').toLowerCase().trim().split(';')[0];
+        const presigned = await getUploadPresignedUrl(
+          uploadFile.name,
+          mimeType,
+          activeCourseId
+        );
+
+        // Step B: Stream Raw Binary to S3 with Progress & explicit Content-Type match
+        await uploadFileWithProgress(
+          presigned.uploadUrl,
+          uploadFile,
+          (percent) => {
+            setUploadProgress(percent);
+          },
+          abortController.signal,
+          mimeType
+        );
+        finalMediaUrl = presigned.fileUrl;
+      }
 
       // Step C: Record asset in database via POST /api/content
       const postPayload = {
@@ -430,7 +446,7 @@ export default function CourseContentManager({
         parentId: currentFolder ? currentFolder.id : null,
         title: uploadTitle.trim(),
         type: uploadType,
-        mediaUrl: presigned.fileUrl,
+        mediaUrl: finalMediaUrl,
         fileSize: formatBytes(uploadFile.size),
       };
 
@@ -545,27 +561,41 @@ export default function CourseContentManager({
     setReplaceProgress(0);
 
     try {
-      const mimeType =
-        replaceFile.type ||
-        (itemToReplace.type === 'pdf' ? 'application/pdf' : 'video/mp4');
+      let finalMediaUrl = '';
 
-      // Get presigned URL
-      const presigned = await getUploadPresignedUrl(
-        replaceFile.name,
-        mimeType,
-        activeCourseId
-      );
+      if (itemToReplace.type === 'video') {
+        const vimeoRes = await uploadTeacherVideo(
+          replaceFile,
+          { title: itemToReplace.title },
+          (pct) => {
+            setReplaceProgress(pct);
+          }
+        );
+        finalMediaUrl = vimeoRes.playerUrl;
+      } else {
+        const mimeType =
+          replaceFile.type ||
+          (itemToReplace.type === 'pdf' ? 'application/pdf' : 'application/octet-stream');
 
-      // Upload binary to S3 with explicit Content-Type match
-      await uploadFileWithProgress(
-        presigned.uploadUrl,
-        replaceFile,
-        (pct) => {
-          setReplaceProgress(pct);
-        },
-        undefined,
-        mimeType
-      );
+        // Get presigned URL
+        const presigned = await getUploadPresignedUrl(
+          replaceFile.name,
+          mimeType,
+          activeCourseId
+        );
+
+        // Upload binary to S3 with explicit Content-Type match
+        await uploadFileWithProgress(
+          presigned.uploadUrl,
+          replaceFile,
+          (pct) => {
+            setReplaceProgress(pct);
+          },
+          undefined,
+          mimeType
+        );
+        finalMediaUrl = presigned.fileUrl;
+      }
 
       // Update record via PATCH /api/content/:id
       const res = await apiFetch<{ success: boolean; data: ContentItem }>(
@@ -573,7 +603,7 @@ export default function CourseContentManager({
         {
           method: 'PATCH',
           body: {
-            mediaUrl: presigned.fileUrl,
+            mediaUrl: finalMediaUrl,
             fileSize: formatBytes(replaceFile.size),
           },
         }
@@ -1017,7 +1047,7 @@ export default function CourseContentManager({
             </div>
 
             <p style={styles.modalSubtitle}>
-              Uploading directly to Amazon S3 storage under{' '}
+              Uploading directly to {uploadType === 'video' ? 'Vimeo Video Hosting (tus resumable upload)' : 'Amazon S3 storage'} under{' '}
               <strong>{currentFolder ? currentFolder.title : 'Root'}</strong>.
             </p>
 
