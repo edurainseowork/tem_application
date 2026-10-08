@@ -22,14 +22,25 @@ export interface AppNotification {
   isRead: boolean;
   createdAt: string;
   liveClass: LiveClass | null;
+  // Set for type 'test' while the test is still visible to students
+  test: {
+    id: number;
+    courseId: number;
+    courseTitle: string | null;
+    title: string;
+    publishTime: string;
+    closeTime: string | null;
+    durationMinutes: number;
+    status: 'SCHEDULED' | 'PUBLISHED' | 'COMPLETED';
+  } | null;
 }
 
 // Students can join from this many minutes before the scheduled start
 export const JOIN_EARLY_MINUTES = 10;
 
 const authFetch = async (path: string, init: RequestInit = {}) => {
-    // After a page reload Firebase restores the saved login asynchronously; wait for it
-    await auth.authStateReady()
+  // After a page reload Firebase restores the saved login asynchronously; wait for it
+  await auth.authStateReady()
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw new Error('Not signed in');
   const res = await fetch(`${API_BASE_URL}/api${path}`, {

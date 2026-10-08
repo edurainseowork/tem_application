@@ -22,8 +22,9 @@ function loadNotifications(): NotificationsModule | null {
 }
 
 /**
- * Registers the device for admin push notifications once a user is signed in, and opens the
- * Notifications screen when the user taps one (including a tap that launched the app).
+ * Registers the device for push notifications once a user is signed in, and opens the
+ * Notifications screen (or the test, for test notifications) when the user taps one,
+ * including a tap that launched the app.
  */
 export function PushNotificationsManager() {
   const { user } = useApp();
@@ -38,12 +39,15 @@ export function PushNotificationsManager() {
     const { registerForPushNotifications } = require('@/utils/pushNotifications') as typeof import('@/utils/pushNotifications');
     registerForPushNotifications().catch((e) => console.warn('Push registration failed:', e?.message ?? e));
 
-    const openNotifications = (response: { notification: { request: { identifier: string } } } | null) => {
+    const openNotifications = (response: { notification: { request: { identifier: string; content: { data?: Record<string, unknown> } } } } | null) => {
       if (!response) return;
       const id = response.notification.request.identifier;
       if (handledResponseId.current === id) return;
       handledResponseId.current = id;
-      router.push('/notifications');
+      // Test notifications open the test itself; everything else opens the Notifications screen
+      const data = response.notification.request.content.data ?? {};
+      if (data.type === 'test' && data.testId) router.push({ pathname: '/test/[id]', params: { id: String(data.testId) } });
+      else router.push('/notifications');
     };
 
     // A tap that launched the app, then any later taps while it runs
