@@ -8,6 +8,7 @@ import { fetchAdminNotifications, getLastSeenAdminNotificationId, setLastSeenAdm
 import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
 import { useColors } from '@/hooks/useColors';
 import { useNow } from '@/hooks/useNow';
+import { formatTestTime } from '@/api/tests';
 
 // Live class notifications and admin notifications come from separate APIs and are shown together
 type FeedItem =
@@ -86,7 +87,7 @@ export default function NotificationsScreen() {
           <View style={[styles.empty, { backgroundColor: colors.accent }]}>
             <Feather name="bell" size={22} color={colors.coral} />
             <Text style={[styles.emptyTitle, { color: colors.navy }]}>You’re all caught up</Text>
-            <Text style={[styles.emptyText, { color: colors.inkSubtle }]}>Announcements and live classes for your courses will show up here.</Text>
+            <Text style={[styles.emptyText, { color: colors.inkSubtle }]}>Announcements, live classes and tests for your courses will show up here.</Text>
           </View>
         ) : (
           feed.map((item) => {
@@ -111,6 +112,29 @@ export default function NotificationsScreen() {
             }
 
             const notification = item.notification;
+            if (notification.test) {
+              const test = notification.test;
+              const live = test.status === 'PUBLISHED' || (test.status === 'SCHEDULED' && now >= new Date(test.publishTime).getTime());
+              const label = test.status === 'COMPLETED' ? 'TEST CLOSED' : live ? 'TEST LIVE NOW' : 'UPCOMING TEST';
+              return (
+                <Pressable
+                  key={`live-${notification.id}`}
+                  onPress={() => router.push({ pathname: '/test/[id]', params: { id: test.id } })}
+                  style={[styles.plainCard, { backgroundColor: colors.card, borderColor: notification.isRead ? colors.border : colors.coral }]}
+                >
+                  <View style={styles.announcementHeader}>
+                    <View style={[styles.announcementIcon, { backgroundColor: colors.accent }]}>
+                      <Feather name="edit-3" size={15} color={colors.coral} />
+                    </View>
+                    <Text style={[styles.announcementTime, { color: live ? colors.coral : colors.inkSubtle }]}>{label}</Text>
+                  </View>
+                  <Text style={[styles.emptyTitle, { color: colors.navy, marginTop: 8 }]}>{test.title}</Text>
+                  <Text style={[styles.emptyText, { color: colors.inkSubtle, textAlign: 'left' }]}>
+                    {test.courseTitle ? `${test.courseTitle} · ` : ''}Starts {formatTestTime(test.publishTime)} · {test.durationMinutes} min
+                  </Text>
+                </Pressable>
+              );
+            }
             return notification.liveClass ? (
               <Pressable key={`live-${notification.id}`} onPress={() => router.push(`/course/${notification.liveClass!.courseId}`)}>
                 <LiveClassCard

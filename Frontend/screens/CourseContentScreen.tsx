@@ -24,6 +24,7 @@ import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { fetchCourseContent } from '@/services/contentService';
 import type { ContentItem, ContentType } from '@/types/content';
+import { CourseTestsSection } from '@/components/Tests/CourseTestsSection';
 
 export interface CourseContentScreenProps {
   courseId: string;
@@ -120,14 +121,14 @@ export function CourseContentScreen({
         // Fallback for environments without screenshot event support
       }
     } else {
-      ScreenCapture.allowScreenCaptureAsync('drm-protected-content').catch(() => {});
+      ScreenCapture.allowScreenCaptureAsync('drm-protected-content').catch(() => { });
     }
 
     return () => {
       if (sub) {
         sub.remove();
       }
-      ScreenCapture.allowScreenCaptureAsync('drm-protected-content').catch(() => {});
+      ScreenCapture.allowScreenCaptureAsync('drm-protected-content').catch(() => { });
     };
   }, [selectedPdf, selectedVideo]);
 
@@ -140,8 +141,8 @@ export function CourseContentScreen({
         const dataArray = Array.isArray(res?.data)
           ? res.data
           : Array.isArray(res)
-          ? res
-          : (res?.data?.data || res?.data?.content || res?.content || []);
+            ? res
+            : (res?.data?.data || res?.data?.content || res?.content || []);
         setItems(Array.isArray(dataArray) ? dataArray : []);
       } catch (err: any) {
         console.error('[CourseContentScreen] Error loading content:', err);
@@ -332,10 +333,10 @@ export function CourseContentScreen({
               backgroundColor: isFolder
                 ? '#e0f2fe'
                 : isVideo
-                ? '#ffe4e6'
-                : isPdf
-                ? '#fef3c7'
-                : '#dcfce7',
+                  ? '#ffe4e6'
+                  : isPdf
+                    ? '#fef3c7'
+                    : '#dcfce7',
             },
           ]}
         >
@@ -362,10 +363,10 @@ export function CourseContentScreen({
                   backgroundColor: isFolder
                     ? '#eff6ff'
                     : isVideo
-                    ? '#fff1f2'
-                    : isPdf
-                    ? '#fffbeb'
-                    : '#f0fdf4',
+                      ? '#fff1f2'
+                      : isPdf
+                        ? '#fffbeb'
+                        : '#f0fdf4',
                 },
               ]}
             >
@@ -376,10 +377,10 @@ export function CourseContentScreen({
                     color: isFolder
                       ? '#1d4ed8'
                       : isVideo
-                      ? '#be123c'
-                      : isPdf
-                      ? '#b45309'
-                      : '#15803d',
+                        ? '#be123c'
+                        : isPdf
+                          ? '#b45309'
+                          : '#15803d',
                   },
                 ]}
               >
@@ -532,6 +533,8 @@ export function CourseContentScreen({
           data={filteredItems}
           keyExtractor={(item, index) => String(item?.id || index)}
           renderItem={renderItem}
+          // Tests for this course are listed above the materials at the top level
+          ListHeaderComponent={!currentFolder && !searchQuery ? <CourseTestsSection courseId={courseId} /> : null}
           contentContainerStyle={[
             styles.listContainer,
             filteredItems.length === 0 && styles.listContainerEmpty,
@@ -652,8 +655,8 @@ export function CourseContentScreen({
                     source={{
                       uri: Platform.OS === 'android'
                         ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
-                            selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url || ''
-                          )}`
+                          selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url || ''
+                        )}`
                         : (selectedPdf.mediaUrl || selectedPdf.media_url || selectedPdf.url || ''),
                     }}
                     style={styles.webView}
@@ -827,11 +830,10 @@ export function CourseContentScreen({
                         </head>
                         <body oncontextmenu="return false;">
                           <div class="watermark">${watermarkText}</div>
-                          ${
-                            isVimeo && vimeoEmbedUrl
-                              ? `<iframe src="${vimeoEmbedUrl}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`
-                              : `<video src="${selectedVideo.mediaUrl}" controls controlsList="nodownload noplaybackrate" playsinline autoplay></video>`
-                          }
+                          ${isVimeo && vimeoEmbedUrl
+                          ? `<iframe src="${vimeoEmbedUrl}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`
+                          : `<video src="${selectedVideo.mediaUrl}" controls controlsList="nodownload noplaybackrate" playsinline autoplay></video>`
+                        }
                         </body>
                         </html>
                       `,
