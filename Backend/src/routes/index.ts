@@ -16,6 +16,8 @@ import enrollmentsRouter from "./enrollments.js";
 import adminNotificationsRouter from "./adminNotifications.js";
 import profileRouter from "./profile.js"
 import vimeoRouter from "./vimeo.routes.js";
+import cmsTestsRouter from "./cmsTests.js";
+import testsRouter from "./tests.js";
 
 const router = Router();
 
@@ -33,6 +35,8 @@ router.use("/auth", authRouter);
 router.use("/profile", profileRouter);
 router.use("/stats", statsRouter);
 router.use("/enrollments", enrollmentsRouter);
+router.use("/cms/tests", cmsTestsRouter);
+router.use("/tests", testsRouter);
 // Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
 router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);

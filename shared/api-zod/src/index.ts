@@ -4,3 +4,4 @@ export * from "./liveClasses";
 export * from "./coupons";
 export * from "./adminNotifications";
 export * from "./payments";
+export * from "./tests";
