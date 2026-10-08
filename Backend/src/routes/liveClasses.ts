@@ -42,7 +42,7 @@ const notifyEnrolledStudents = async (tx: Tx, liveClass: LiveClass, courseTitle:
 };
 
 // Deletes everything beyond each user's newest MAX_NOTIFICATIONS_PER_USER notifications
-const pruneOldNotifications = async (tx: Tx, userIds: number[]) => {
+export const pruneOldNotifications = async (tx: Tx, userIds: number[]) => {
   if (userIds.length === 0) return;
   await tx.execute(sql`
     DELETE FROM ${notificationsTable}

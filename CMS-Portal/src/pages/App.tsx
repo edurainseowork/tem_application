@@ -9,6 +9,7 @@ import RoleGuard from '../components/RoleGuard'
 import Coupons from './Coupons'
 import GoLive from './GoLive'
 import Notifications from './Notifications'
+import Tests from './Tests'
 import '../index.css'
 
 function App() {
@@ -256,6 +257,9 @@ function App() {
           <div className={`nav-link ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
             Notifications
           </div>
+          <div className={`nav-link ${activeTab === 'tests' ? 'active' : ''}`} onClick={() => setActiveTab('tests')}>
+            Tests
+          </div>
         </nav>
       </aside>
 
@@ -271,6 +275,7 @@ function App() {
             {activeTab === 'coupons' && 'Coupon Generator'}
             {activeTab === 'golive' && 'Live Classes'}
             {activeTab === 'notifications' && 'Notifications'}
+            {activeTab === 'tests' && 'Test Management'}
           </h1>
           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</span>
@@ -398,6 +403,10 @@ function App() {
 
         {activeTab === 'notifications' && (
           <Notifications showToast={showToast} />
+        )}
+
+        {activeTab === 'tests' && (
+          <Tests showToast={showToast} />
         )}
       </main>
     </div>

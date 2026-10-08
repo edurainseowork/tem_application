@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { coursesTable, liveClassesTable, notificationsTable } from "@workspace/db/schema";
+import { coursesTable, liveClassesTable, notificationsTable, testsTable } from "@workspace/db/schema";
 import { getLiveClassStatus } from "@workspace/api-zod";
 import { and, desc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { testStatusSql } from "../lib/testAttempts";
 import { findDbUserId, requireAuth } from "../middlewares/auth.js";
 import { MAX_NOTIFICATIONS_PER_USER } from "./liveClasses.js";
 
 const router = Router();
+const testCourses = alias(coursesTable, "test_courses");
 
 router.use(requireAuth);
 
@@ -23,18 +26,32 @@ router.get("/", async (req, res) => {
       notification: notificationsTable,
       liveClass: liveClassesTable,
       courseTitle: coursesTable.title,
+      test: {
+        id: testsTable.id,
+        courseId: testsTable.courseId,
+        courseTitle: testCourses.title,
+        title: testsTable.title,
+        publishTime: testsTable.publishTime,
+        closeTime: testsTable.closeTime,
+        durationMinutes: testsTable.durationMinutes,
+        status: testStatusSql,
+      },
     })
       .from(notificationsTable)
       .leftJoin(liveClassesTable, eq(notificationsTable.liveClassId, liveClassesTable.id))
       .leftJoin(coursesTable, eq(liveClassesTable.courseId, coursesTable.id))
+      .leftJoin(testsTable, eq(notificationsTable.testId, testsTable.id))
+      .leftJoin(testCourses, eq(testsTable.courseId, testCourses.id))
       .where(eq(notificationsTable.userId, userId))
       .orderBy(desc(notificationsTable.createdAt), desc(notificationsTable.id))
       .limit(MAX_NOTIFICATIONS_PER_USER);
 
     res.json({
       success: true,
-      data: rows.map(({ notification, liveClass, courseTitle }) => ({
+      data: rows.map(({ notification, liveClass, courseTitle, test }) => ({
         ...notification,
+        // Drafts and archived tests are no longer shown to students
+        test: test && test.id !== null && test.status !== "DRAFT" && test.status !== "ARCHIVED" ? test : null,
         liveClass: liveClass
           ? { ...liveClass, courseTitle, status: getLiveClassStatus(liveClass.startTime, liveClass.endTime) }
           : null,

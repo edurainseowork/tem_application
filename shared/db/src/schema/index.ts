@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, index, pgEnum, varchar, uniqueIndex, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, index, pgEnum, varchar, uniqueIndex, primaryKey, doublePrecision, unique } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -171,16 +171,19 @@ export const liveClassesTable = pgTable("live_classes", {
 export const notificationsTable = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => usersTable.id, { onDelete: 'cascade' }).notNull(),
-  type: text("type").notNull(), // 'live_class'
+  type: text("type").notNull(), // 'live_class' | 'test'
   title: text("title").notNull(),
   body: text("body").notNull(),
   liveClassId: integer("live_class_id").references(() => liveClassesTable.id, { onDelete: 'cascade' }),
+  testId: integer("test_id").references(() => testsTable.id, { onDelete: 'cascade' }), // type 'test'
   isRead: boolean("is_read").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("notifications_user_id_created_at_idx").on(table.userId, table.createdAt),
   // A student is notified about a given live class at most once
   uniqueIndex("notifications_user_id_live_class_id_idx").on(table.userId, table.liveClassId),
+  // ...and about a given test at most once
+  uniqueIndex("notifications_user_id_test_id_idx").on(table.userId, table.testId),
 ]);
 
 // ---- Admin notifications (separate from live class notifications) ----
@@ -211,6 +214,76 @@ export const adminNotificationsTable = pgTable("admin_notifications", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ---- Tests / examinations (CMS sidebar → Tests) ----
+
+// A test belongs to a course; students who own the course can take it.
+// Stored status is DRAFT | SCHEDULED | ARCHIVED. SCHEDULED tests become PUBLISHED at publish_time
+// and COMPLETED at close_time, judged by the database clock (no manual lock/unlock).
+export const testsTable = pgTable("tests", {
+  id: serial("id").primaryKey(),
+  courseId: integer("course_id").references(() => coursesTable.id, { onDelete: 'cascade' }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  targetBatch: text("target_batch"), // display label only; there is no batch table yet
+  status: text("status").default("DRAFT").notNull(),
+  publishTime: timestamp("publish_time", { withTimezone: true }).notNull(),
+  closeTime: timestamp("close_time", { withTimezone: true }),
+  durationMinutes: integer("duration_minutes").notNull(),
+  marksPositive: doublePrecision("marks_positive").default(4).notNull(),
+  marksNegative: doublePrecision("marks_negative").default(1).notNull(),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("tests_course_id_idx").on(table.courseId),
+]);
+
+// correct_answer and solution are for the CMS and marking only; never send them to students
+export const testQuestionsTable = pgTable("test_questions", {
+  id: serial("id").primaryKey(),
+  testId: integer("test_id").references(() => testsTable.id, { onDelete: 'cascade' }).notNull(),
+  type: text("type").notNull(), // multiple_choice | integer | fill_ups | true_false | comprehension | match_the_following
+  questionText: text("question_text").notNull(),
+  passage: text("passage"), // comprehension only
+  options: jsonb("options"), // [{ key, text }] or, for match_the_following, { left: [{ key, text }], right: [{ key, text }] }
+  correctAnswer: text("correct_answer").notNull(),
+  solution: text("solution"),
+  marksPositive: doublePrecision("marks_positive"), // null = use the test's marks
+  marksNegative: doublePrecision("marks_negative"),
+  questionOrder: integer("question_order").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("test_questions_test_id_idx").on(table.testId),
+]);
+
+// One row per attempt: created when the student starts (server timer), completed on submit
+export const testSubmissionsTable = pgTable("test_submissions", {
+  id: serial("id").primaryKey(),
+  testId: integer("test_id").references(() => testsTable.id, { onDelete: 'cascade' }).notNull(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: 'cascade' }).notNull(),
+  attemptNumber: integer("attempt_number").default(1).notNull(),
+  status: text("status").default("IN_PROGRESS").notNull(), // IN_PROGRESS | SUBMITTED
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  score: doublePrecision("score").default(0).notNull(),
+  correctCount: integer("correct_count").default(0).notNull(),
+  wrongCount: integer("wrong_count").default(0).notNull(),
+  skippedCount: integer("skipped_count").default(0).notNull(),
+  totalQuestions: integer("total_questions").default(0).notNull(),
+  answers: jsonb("answers"), // exactly what the student submitted
+  results: jsonb("results"), // per-question marking at submit time, for the CMS review
+  submissionReason: text("submission_reason"),
+  violationCount: integer("violation_count").default(0).notNull(), // events recorded by the server
+  reportedViolationCount: integer("reported_violation_count"), // what the app claimed at submit
+  violations: jsonb("violations").default([]).notNull(), // [{ type, at }]
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("test_submissions_attempt_unique").on(table.testId, table.userId, table.attemptNumber),
+  index("test_submissions_test_id_idx").on(table.testId),
+]);
+
 // Zod Schemas
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -232,3 +305,6 @@ export type Notification = typeof notificationsTable.$inferSelect;
 export type Coupon = typeof couponsTable.$inferSelect;
 export type AdminNotification = typeof adminNotificationsTable.$inferSelect;
 export type Payment = typeof paymentsTable.$inferSelect;
+export type Test = typeof testsTable.$inferSelect;
+export type TestQuestion = typeof testQuestionsTable.$inferSelect;
+export type TestSubmission = typeof testSubmissionsTable.$inferSelect;
