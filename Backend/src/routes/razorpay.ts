@@ -9,13 +9,19 @@ import { calculateDiscount, checkCoupon, redeemCoupon } from "./coupons.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { logger } from "../lib/logger";
 
-// Razorpay checkout (test mode with rzp_test_ keys). RAZORPAY_SECRET stays on the server;
-// the app only ever receives the public key id (RAZORPAY_KEY) and the order id.
 const router = Router();
 
-const keyId = process.env.RAZORPAY_KEY_ID;
-const keySecret = process.env.RAZORPAY_SECRET;
-const razorpay = keyId && keySecret ? new Razorpay({ key_id: keyId, key_secret: keySecret }) : null;
+const getRazorpayCredentials = () => {
+  const sanitize = (val?: string) => val?.trim().replace(/^["']|["']$/g, "") || undefined;
+  const keyId = sanitize(process.env.RAZORPAY_KEY_ID);
+  const keySecret = sanitize(process.env.RAZORPAY_SECRET) || sanitize(process.env.RAZORPAY_KEY_SECRET);
+  return { keyId, keySecret };
+};
+
+const getRazorpayClient = () => {
+  const { keyId, keySecret } = getRazorpayCredentials();
+  return keyId && keySecret ? new Razorpay({ key_id: keyId, key_secret: keySecret }) : null;
+};
 
 // Razorpay does not accept orders below ₹1
 const MIN_AMOUNT_PAISE = 100;
@@ -108,8 +114,11 @@ router.post("/order", requireAuth, async (req, res) => {
       return;
     }
 
-    if (!razorpay) {
-      res.status(500).json({ error: "Payments are not configured. Set RAZORPAY_KEY and RAZORPAY_SECRET in .env." });
+    const { keyId, keySecret } = getRazorpayCredentials();
+    const razorpay = getRazorpayClient();
+
+    if (!razorpay || !keyId || !keySecret) {
+      res.status(500).json({ error: "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_SECRET in .env." });
       return;
     }
 
@@ -139,9 +148,10 @@ router.post("/order", requireAuth, async (req, res) => {
       courseTitle: course.title,
       prefill: { name: user.name ?? "", email: user.email },
     });
-  } catch (error) {
-    logger.error({ err: error }, "Failed to create Razorpay order");
-    res.status(500).json({ error: "Failed to create payment order" });
+  } catch (error: any) {
+    const errorDescription = error?.error?.description || error?.message || "Failed to create payment order";
+    logger.error({ err: error }, `Failed to create Razorpay order: ${errorDescription}`);
+    res.status(500).json({ error: errorDescription });
   }
 });
 
@@ -154,8 +164,9 @@ router.post("/verify", requireAuth, async (req, res) => {
     return;
   }
   const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = parsed.data;
+  const { keySecret } = getRazorpayCredentials();
   if (!keySecret) {
-    res.status(500).json({ error: "Payments are not configured. Set RAZORPAY_KEY and RAZORPAY_SECRET in .env." });
+    res.status(500).json({ error: "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_SECRET in .env." });
     return;
   }
 
