@@ -243,15 +243,10 @@ export interface VideoUploadMetadata {
 }
 
 export interface VideoUploadResult {
-  vimeoVideoId?: string; // backwards compatibility alias
   videoId: string;
   playerUrl: string;
   directUrl?: string;
 }
-
-// Deprecated alias for backwards compatibility
-export type VimeoUploadMetadata = VideoUploadMetadata;
-export type VimeoUploadResult = VideoUploadResult;
 
 /**
  * Direct client-to-Bunny.net Stream resumable video upload via TUS protocol.
@@ -331,7 +326,6 @@ export async function uploadTeacherVideo(
       onSuccess: () => {
         console.log('Upload complete. Bunny Video ID:', videoId);
         resolve({
-          vimeoVideoId: videoId,
           videoId,
           playerUrl: playerUrl || `https://iframe.mediadelivery.net/${libraryId}/${videoId}`,
           directUrl,
