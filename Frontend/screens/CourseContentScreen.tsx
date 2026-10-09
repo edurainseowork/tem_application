@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import {
   Platform,
   Alert,
   RefreshControl,
+  Animated,
+  Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,6 +22,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ScreenCapture from 'expo-screen-capture';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
@@ -73,6 +77,77 @@ export function CourseContentScreen({
   const [selectedVideo, setSelectedVideo] = useState<ContentItem | null>(null);
   const [isVideoFullscreen, setIsVideoFullscreen] = useState<boolean>(false);
   const [selectedNote, setSelectedNote] = useState<ContentItem | null>(null);
+
+  // Dynamic Screen Dimensions & Landscape Orientation Detection
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isLandscape = windowWidth > windowHeight;
+  const isEffectiveFullscreen = isVideoFullscreen || isLandscape;
+
+  // Manage Orientation Unlocking for Video Player (Auto-Rotate Support)
+  useEffect(() => {
+    if (selectedVideo) {
+      // Allow user to rotate device to landscape or portrait freely
+      ScreenOrientation.unlockAsync().catch(() => {});
+    } else {
+      // Re-lock to portrait when video player closes
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      setIsVideoFullscreen(false);
+    }
+
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [selectedVideo]);
+
+  const handleExitFullscreen = useCallback(() => {
+    setIsVideoFullscreen(false);
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
+      .then(() => {
+        setTimeout(() => {
+          ScreenOrientation.unlockAsync().catch(() => {});
+        }, 500);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleFullscreen = useCallback(() => {
+    if (isEffectiveFullscreen) {
+      handleExitFullscreen();
+    } else {
+      setIsVideoFullscreen(true);
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+    }
+  }, [isEffectiveFullscreen, handleExitFullscreen]);
+
+  // Gentle Floating Animation for Centered DRM Watermark
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!selectedVideo) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 3500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 3500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [selectedVideo, floatAnim]);
+
+  const translateY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-14, 14],
+  });
 
   // Load Sandboxed Offline PDF metadata from AsyncStorage
   const loadOfflineCacheIndex = useCallback(async () => {
@@ -281,34 +356,29 @@ export function CourseContentScreen({
         function ensureWatermark() {
           var el = document.getElementById('edurain-stream-watermark');
           if (!el) {
+            var style = document.createElement('style');
+            style.innerHTML = '@keyframes edurainFloat { 0%, 100% { transform: translate(-50%, -58%) rotate(-12deg); } 50% { transform: translate(-50%, -42%) rotate(-12deg); } }';
+            document.head.appendChild(style);
+
             el = document.createElement('div');
             el.id = 'edurain-stream-watermark';
             el.style.position = 'fixed';
-            el.style.top = '0';
-            el.style.left = '0';
-            el.style.width = '100vw';
-            el.style.height = '100vh';
+            el.style.top = '50%';
+            el.style.left = '50%';
+            el.style.transform = 'translate(-50%, -50%) rotate(-12deg)';
+            el.style.animation = 'edurainFloat 3.5s ease-in-out infinite';
             el.style.pointerEvents = 'none';
             el.style.zIndex = '2147483647';
-            el.style.display = 'flex';
-            el.style.flexDirection = 'column';
-            el.style.justifyContent = 'space-around';
-            el.style.alignItems = 'center';
+            el.style.color = 'rgba(255, 255, 255, 0.28)';
+            el.style.fontSize = '12px';
+            el.style.fontWeight = '600';
+            el.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+            el.style.letterSpacing = '0.8px';
+            el.style.textShadow = '0 0 4px rgba(0,0,0,0.9)';
+            el.style.whiteSpace = 'nowrap';
             el.style.userSelect = 'none';
             el.style.webkitUserSelect = 'none';
-            
-            for (var i = 0; i < 4; i++) {
-              var t = document.createElement('div');
-              t.innerText = ${JSON.stringify(watermarkText)};
-              t.style.color = 'rgba(255, 255, 255, 0.35)';
-              t.style.fontSize = '15px';
-              t.style.fontWeight = '700';
-              t.style.fontFamily = 'system-ui, -apple-system, sans-serif';
-              t.style.transform = 'rotate(-25deg)';
-              t.style.letterSpacing = '1px';
-              t.style.textShadow = '0 0 6px rgba(0,0,0,0.9)';
-              el.appendChild(t);
-            }
+            el.innerText = ${JSON.stringify(watermarkText)};
             document.body.appendChild(el);
           }
         }
@@ -796,17 +866,18 @@ export function CourseContentScreen({
           visible={Boolean(selectedVideo)}
           animationType="fade"
           presentationStyle="fullScreen"
+          supportedOrientations={['portrait', 'portrait-upside-down', 'landscape', 'landscape-left', 'landscape-right']}
           onRequestClose={() => {
-            if (isVideoFullscreen) {
-              setIsVideoFullscreen(false);
+            if (isEffectiveFullscreen) {
+              handleExitFullscreen();
             } else {
               setSelectedVideo(null);
             }
           }}
         >
           <View style={styles.videoPlayerScreen}>
-            {/* Player Top Navigation (Hidden in Fullscreen) */}
-            {!isVideoFullscreen && (
+            {/* Player Top Navigation (Hidden in Fullscreen or Landscape) */}
+            {!isEffectiveFullscreen && (
               <View
                 style={[
                   styles.videoPlayerHeader,
@@ -815,7 +886,7 @@ export function CourseContentScreen({
               >
                 <Pressable
                   onPress={() => {
-                    setIsVideoFullscreen(false);
+                    handleExitFullscreen();
                     setSelectedVideo(null);
                   }}
                   style={styles.videoCloseBtn}
@@ -840,7 +911,7 @@ export function CourseContentScreen({
                   </View>
 
                   <Pressable
-                    onPress={() => setIsVideoFullscreen(true)}
+                    onPress={handleToggleFullscreen}
                     style={styles.videoHeaderFullscreenBtn}
                     hitSlop={8}
                   >
@@ -851,7 +922,7 @@ export function CourseContentScreen({
             )}
 
             {/* In-App Protected Video Player via Direct Native/Sandbox WebView */}
-            <View style={[styles.videoContainer, isVideoFullscreen && styles.videoContainerFullscreen]}>
+            <View style={[styles.videoContainer, isEffectiveFullscreen && styles.videoContainerFullscreen]}>
               {selectedVideo.mediaUrl ? (() => {
                 const urlStr = selectedVideo.mediaUrl.trim();
                 const isBunny = urlStr.includes('mediadelivery.net') || urlStr.includes('b-cdn.net');
@@ -901,7 +972,7 @@ export function CourseContentScreen({
                         try {
                           const msg = JSON.parse(event.nativeEvent.data);
                           if (msg?.type === 'TOGGLE_FULLSCREEN') {
-                            setIsVideoFullscreen((prev) => !prev);
+                            handleToggleFullscreen();
                           }
                         } catch {}
                       }}
@@ -923,26 +994,30 @@ export function CourseContentScreen({
                       onShouldStartLoadWithRequest={() => true}
                     />
 
-                    {/* Dynamic High-Visibility Screen Watermark (anti-leak / deterrent) */}
-                    <View pointerEvents="none" style={styles.videoWatermarkOverlay}>
-                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
-                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
-                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
-                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
+                    {/* Dynamic DRM Watermark (Centered, Small, & Floating) */}
+                    <View pointerEvents="none" style={styles.videoWatermarkCenterContainer}>
+                      <Animated.View style={{ transform: [{ translateY }] }}>
+                        <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
+                      </Animated.View>
                     </View>
 
-                    {/* Floating Exit Fullscreen Button when in Fullscreen Mode */}
-                    {isVideoFullscreen && (
+                    {/* Floating Exit Button when in Fullscreen or Landscape Mode */}
+                    {isEffectiveFullscreen && (
                       <Pressable
-                        onPress={() => setIsVideoFullscreen(false)}
+                        onPress={handleExitFullscreen}
                         style={[
                           styles.floatingExitFullscreenBtn,
-                          { top: Platform.OS === 'ios' ? 48 : insets.top + 16 },
+                          {
+                            top: Platform.OS === 'ios' ? Math.max(insets.top, 24) : insets.top + 12,
+                            left: Math.max(insets.left, 16),
+                          },
                         ]}
                         hitSlop={10}
                       >
-                        <Feather name="minimize-2" size={18} color="#ffffff" />
-                        <Text style={styles.floatingExitFullscreenText}>Exit Fullscreen</Text>
+                        <Feather name={isLandscape ? 'minimize-2' : 'chevron-left'} size={16} color="#ffffff" />
+                        <Text style={styles.floatingExitFullscreenText}>
+                          {isLandscape ? 'Portrait' : 'Exit Fullscreen'}
+                        </Text>
                       </Pressable>
                     )}
                   </View>
@@ -958,8 +1033,8 @@ export function CourseContentScreen({
               )}
             </View>
 
-            {/* Bottom Playback Info (Hidden in Fullscreen) */}
-            {!isVideoFullscreen && (
+            {/* Bottom Playback Info (Hidden in Fullscreen or Landscape) */}
+            {!isEffectiveFullscreen && (
               <View
                 style={[
                   styles.videoFooter,
@@ -1394,22 +1469,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
   },
-  videoWatermarkOverlay: {
+  videoWatermarkCenterContainer: {
     ...StyleSheet.absoluteFill,
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
     zIndex: 99,
   },
   videoWatermarkText: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.38)',
-    fontFamily: 'Inter_700Bold',
-    transform: [{ rotate: '-22deg' }],
-    letterSpacing: 1.2,
-    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.28)',
+    fontFamily: 'Inter_600SemiBold',
+    transform: [{ rotate: '-12deg' }],
+    letterSpacing: 0.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.85)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 5,
+    textShadowRadius: 4,
+    textAlign: 'center',
   },
   videoLoadingContainer: {
     ...StyleSheet.absoluteFill,
