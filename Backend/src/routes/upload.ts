@@ -39,7 +39,7 @@ const ALLOWED_MEDIA_TYPES = new Set([
 
 // AWS S3 Configuration strictly from environment variables
 const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "ap-south-1";
-const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_BUCKET_NAME || process.env.S3_BUCKET || "edurain-media-assets";
+const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME || process.env.AWS_BUCKET_NAME || process.env.S3_BUCKET || "edurain-media-assets";
 
 // AWS S3 Client initialization with secure backend credentials
 const s3Client = new S3Client({
