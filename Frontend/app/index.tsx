@@ -1,13 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,6 +16,7 @@ import { useApp } from '@/context/AppContext';
 import { useColors } from '@/hooks/useColors';
 import { auth } from '@/firebaseConfig';
 import { Msg91Widget as DefaultWidget } from '@/components/Shared/Msg91Widget';
+import { KeyboardAwareScrollViewCompat } from '@/components/Shared/KeyboardAwareScrollViewCompat';
 
 type AuthMode = 'login' | 'signup';
 
@@ -37,6 +35,11 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showWidget, setShowWidget] = useState(false);
+    // "Next" on the keyboard moves to the following field; "Done" on the last field submits
+  const phoneRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (isReady && user) router.replace('/home');
@@ -155,16 +158,17 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
+        <View style={[styles.flex, { backgroundColor: colors.background }]}>
+      {/* Scrolls the focused field above the keyboard on both Android and iOS */}
+      <KeyboardAwareScrollViewCompat
+        style={styles.flex}
         contentContainerStyle={[
           styles.container,
           { paddingTop: insets.top + 22, paddingBottom: insets.bottom + 28 },
         ]}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={32}
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
           <View style={[styles.iconHalo, { backgroundColor: colors.accent }]}>
@@ -195,7 +199,7 @@ export default function LoginScreen() {
           <Text style={[styles.formTitle, { color: colors.navy, marginTop: 15 }]}>{mode === 'login' ? 'Welcome back' : 'Start your journey'}</Text>
           <Text style={[styles.formHint, { color: colors.inkSubtle }]}>{mode === 'login' ? 'Continue where you left off.' : 'Start building your learning streak.'}</Text>
 
-          {mode === 'signup' ? (
+                    {mode === 'signup' ? (
               <>
                 <Text style={[styles.label, { color: colors.navy }]}>Your name</Text>
                 <View style={[styles.inputWrap, { borderColor: colors.input, backgroundColor: colors.background }]}>
@@ -207,6 +211,9 @@ export default function LoginScreen() {
                     placeholderTextColor={colors.inkSubtle}
                     style={[styles.input, { color: colors.navy }]}
                     autoCapitalize="words"
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => phoneRef.current?.focus()}
                   />
                 </View>
                 <Text style={[styles.label, { color: colors.navy }]}>Phone Number</Text>
@@ -214,6 +221,7 @@ export default function LoginScreen() {
                   <Feather name="phone" size={17} color={colors.inkSubtle} />
                   <Text style={{ fontFamily: 'Inter_600SemiBold', color: colors.navy }}>+91</Text>
                   <TextInput
+                    ref={phoneRef}
                     value={phone}
                     onChangeText={setPhone}
                     placeholder="9876543210"
@@ -221,12 +229,16 @@ export default function LoginScreen() {
                     style={[styles.input, { color: colors.navy }]}
                     keyboardType="number-pad"
                     maxLength={10}
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => emailRef.current?.focus()}
                   />
                 </View>
                 <Text style={[styles.label, { color: colors.navy }]}>Email address</Text>
                 <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
                   <Feather name="mail" size={17} color={colors.inkSubtle} />
                   <TextInput
+                    ref={emailRef}
                     value={email}
                     onChangeText={setEmail}
                     placeholder="you@example.com"
@@ -235,12 +247,16 @@ export default function LoginScreen() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => passwordRef.current?.focus()}
                   />
                 </View>
                 <Text style={[styles.label, { color: colors.navy }]}>Password</Text>
                 <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
                   <Feather name="lock" size={17} color={colors.inkSubtle} />
                   <TextInput
+                    ref={passwordRef}
                     value={password}
                     onChangeText={(value) => {
                       setPassword(value);
@@ -252,6 +268,9 @@ export default function LoginScreen() {
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => confirmRef.current?.focus()}
                   />
                   <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
                     <Feather name={showPassword ? "eye-off" : "eye"} size={17} color={colors.inkSubtle} />
@@ -261,6 +280,7 @@ export default function LoginScreen() {
                 <View style={[styles.inputWrap, { borderColor: passwordMismatch || error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
                   <Feather name="check" size={17} color={colors.inkSubtle} />
                   <TextInput
+                    ref={confirmRef}
                     value={confirmPassword}
                     onChangeText={(value) => {
                       setConfirmPassword(value);
@@ -272,6 +292,8 @@ export default function LoginScreen() {
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={handleContinue}
                   />
                 </View>
                 {passwordMismatch ? (
@@ -293,12 +315,16 @@ export default function LoginScreen() {
                   style={[styles.input, { color: colors.navy }]}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
                 />
               </View>
               <Text style={[styles.label, { color: colors.navy }]}>Password</Text>
               <View style={[styles.inputWrap, { borderColor: error ? colors.destructive : colors.input, backgroundColor: colors.background }]}>
                 <Feather name="lock" size={17} color={colors.inkSubtle} />
                 <TextInput
+                  ref={passwordRef}
                   value={password}
                   onChangeText={(value) => {
                     setPassword(value);
@@ -310,6 +336,8 @@ export default function LoginScreen() {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  returnKeyType="go"
+                  onSubmitEditing={handleContinue}
                 />
                 <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
                   <Feather name={showPassword ? "eye-off" : "eye"} size={17} color={colors.inkSubtle} />
@@ -351,7 +379,7 @@ export default function LoginScreen() {
           <Feather name="shield" size={15} color={colors.success} />
           <Text style={[styles.bottomNoteText, { color: colors.inkSubtle }]}>Your learning space is private and secure.</Text>
         </View>
-      </ScrollView>
+            </KeyboardAwareScrollViewCompat>
       {showWidget && (
         <DefaultWidget
           visible={showWidget}
@@ -361,7 +389,7 @@ export default function LoginScreen() {
           tokenAuth="575019TcH2mXdWy6ab9fc92P1"
         />
       )}
-    </KeyboardAvoidingView>
+        </View>
   );
 }
 
