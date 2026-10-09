@@ -22,8 +22,9 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ScreenCapture from 'expo-screen-capture';
-import * as ScreenOrientation from 'expo-screen-orientation';
 
+import { auth } from '../firebaseConfig';
+import { fetchProfile } from '../api/profile';
 import { useColors } from '@/hooks/useColors';
 import { useApp } from '@/context/AppContext';
 import { fetchCourseContent } from '@/services/contentService';
@@ -78,76 +79,32 @@ export function CourseContentScreen({
   const [isVideoFullscreen, setIsVideoFullscreen] = useState<boolean>(false);
   const [selectedNote, setSelectedNote] = useState<ContentItem | null>(null);
 
+  // User Registered Phone Number for DRM Watermark (from Firebase Auth / Profile)
+  const [userPhone, setUserPhone] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fbPhone = auth.currentUser?.phoneNumber;
+    if (fbPhone) {
+      setUserPhone(fbPhone);
+      return;
+    }
+    fetchProfile()
+      .then((p) => {
+        if (p?.phone) {
+          setUserPhone(p.phone);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Dynamic Screen Dimensions & Landscape Orientation Detection
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isLandscape = windowWidth > windowHeight;
   const isEffectiveFullscreen = isVideoFullscreen || isLandscape;
 
-  // Manage Orientation Unlocking for Video Player (Auto-Rotate Support)
-  useEffect(() => {
-    if (selectedVideo) {
-      // Allow user to rotate device to landscape or portrait freely
-      ScreenOrientation.unlockAsync().catch(() => {});
-    } else {
-      // Re-lock to portrait when video player closes
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-      setIsVideoFullscreen(false);
-    }
-
-    return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-    };
-  }, [selectedVideo]);
-
-  const handleExitFullscreen = useCallback(() => {
-    setIsVideoFullscreen(false);
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
-      .then(() => {
-        setTimeout(() => {
-          ScreenOrientation.unlockAsync().catch(() => {});
-        }, 500);
-      })
-      .catch(() => {});
-  }, []);
-
   const handleToggleFullscreen = useCallback(() => {
-    if (isEffectiveFullscreen) {
-      handleExitFullscreen();
-    } else {
-      setIsVideoFullscreen(true);
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
-    }
-  }, [isEffectiveFullscreen, handleExitFullscreen]);
-
-  // Gentle Floating Animation for Centered DRM Watermark
-  const floatAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!selectedVideo) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: 1,
-          duration: 3500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 3500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [selectedVideo, floatAnim]);
-
-  const translateY = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-14, 14],
-  });
+    setIsVideoFullscreen((prev) => !prev);
+  }, []);
 
   // Load Sandboxed Offline PDF metadata from AsyncStorage
   const loadOfflineCacheIndex = useCallback(async () => {
@@ -344,41 +301,49 @@ export function CourseContentScreen({
     }
   };
 
-  // DRM Watermark text for Protected Video & PDF Readers
-  const watermarkText = useMemo(() => {
+  // DRM Watermark text for In-App Sandboxed PDF Reader
+  const pdfWatermarkText = useMemo(() => {
     return user?.email || user?.uid ? `${user.email || user.uid} • Protected Content` : 'Student Access • Protected';
   }, [user]);
 
-  // Injected JavaScript for DOM-Level DRM Watermark & Fullscreen Interception
+  // DRM Watermark text for Protected Video Player (Email + Phone + Protected Content)
+  // "Mail aaye, aur protected content likha hua aaye. Mail ke saath-saath agar user ne number bhi diya hua hai na signup pe, Firebase pe, toh number bhi likh ke aaye... beech-o-beech mein, seedha, chhota sa"
+  const videoWatermarkText = useMemo(() => {
+    const parts: string[] = [];
+    const mail = user?.email || auth.currentUser?.email;
+    if (mail) parts.push(mail);
+    const phone = userPhone || auth.currentUser?.phoneNumber;
+    if (phone) parts.push(phone);
+    if (parts.length === 0 && user?.uid) parts.push(user.uid);
+    parts.push('Protected Content');
+    return parts.join(' • ');
+  }, [user, userPhone]);
+
+  // Injected JavaScript for DOM-Level Static Centered Watermark & Fullscreen Interception
   const injectedWatermarkScript = useMemo(() => {
     return `
       (function() {
         function ensureWatermark() {
           var el = document.getElementById('edurain-stream-watermark');
           if (!el) {
-            var style = document.createElement('style');
-            style.innerHTML = '@keyframes edurainFloat { 0%, 100% { transform: translate(-50%, -58%) rotate(-12deg); } 50% { transform: translate(-50%, -42%) rotate(-12deg); } }';
-            document.head.appendChild(style);
-
             el = document.createElement('div');
             el.id = 'edurain-stream-watermark';
             el.style.position = 'fixed';
             el.style.top = '50%';
             el.style.left = '50%';
-            el.style.transform = 'translate(-50%, -50%) rotate(-12deg)';
-            el.style.animation = 'edurainFloat 3.5s ease-in-out infinite';
+            el.style.transform = 'translate(-50%, -50%)';
             el.style.pointerEvents = 'none';
             el.style.zIndex = '2147483647';
-            el.style.color = 'rgba(255, 255, 255, 0.28)';
+            el.style.color = 'rgba(255, 255, 255, 0.32)';
             el.style.fontSize = '12px';
             el.style.fontWeight = '600';
             el.style.fontFamily = 'system-ui, -apple-system, sans-serif';
-            el.style.letterSpacing = '0.8px';
+            el.style.letterSpacing = '0.6px';
             el.style.textShadow = '0 0 4px rgba(0,0,0,0.9)';
             el.style.whiteSpace = 'nowrap';
             el.style.userSelect = 'none';
             el.style.webkitUserSelect = 'none';
-            el.innerText = ${JSON.stringify(watermarkText)};
+            el.innerText = ${JSON.stringify(videoWatermarkText)};
             document.body.appendChild(el);
           }
         }
@@ -405,7 +370,7 @@ export function CourseContentScreen({
       })();
       true;
     `;
-  }, [watermarkText]);
+  }, [videoWatermarkText]);
 
   // Render Item for Student FlatList
   const renderItem = ({ item }: { item: ContentItem }) => {
@@ -825,9 +790,9 @@ export function CourseContentScreen({
 
                   {/* Dynamic Floating Watermark Overlay (PRD Section 6.5) */}
                   <View pointerEvents="none" style={styles.pdfWatermarkOverlay}>
-                    <Text style={styles.pdfWatermarkText}>{watermarkText}</Text>
-                    <Text style={styles.pdfWatermarkText}>{watermarkText}</Text>
-                    <Text style={styles.pdfWatermarkText}>{watermarkText}</Text>
+                    <Text style={styles.pdfWatermarkText}>{pdfWatermarkText}</Text>
+                    <Text style={styles.pdfWatermarkText}>{pdfWatermarkText}</Text>
+                    <Text style={styles.pdfWatermarkText}>{pdfWatermarkText}</Text>
                   </View>
                 </>
               ) : (
@@ -851,7 +816,7 @@ export function CourseContentScreen({
             >
               <Feather name="lock" size={13} color="#059669" />
               <Text style={styles.drmFooterText}>
-                Protected Material • {watermarkText} • External downloads disabled
+                Protected Material • {pdfWatermarkText} • External downloads disabled
               </Text>
             </View>
           </View>
@@ -868,8 +833,8 @@ export function CourseContentScreen({
           presentationStyle="fullScreen"
           supportedOrientations={['portrait', 'portrait-upside-down', 'landscape', 'landscape-left', 'landscape-right']}
           onRequestClose={() => {
-            if (isEffectiveFullscreen) {
-              handleExitFullscreen();
+            if (isVideoFullscreen) {
+              setIsVideoFullscreen(false);
             } else {
               setSelectedVideo(null);
             }
@@ -886,7 +851,7 @@ export function CourseContentScreen({
               >
                 <Pressable
                   onPress={() => {
-                    handleExitFullscreen();
+                    setIsVideoFullscreen(false);
                     setSelectedVideo(null);
                   }}
                   style={styles.videoCloseBtn}
@@ -994,17 +959,15 @@ export function CourseContentScreen({
                       onShouldStartLoadWithRequest={() => true}
                     />
 
-                    {/* Dynamic DRM Watermark (Centered, Small, & Floating) */}
+                    {/* Dynamic Video DRM Watermark (Centered, Straight, Small, Static) */}
                     <View pointerEvents="none" style={styles.videoWatermarkCenterContainer}>
-                      <Animated.View style={{ transform: [{ translateY }] }}>
-                        <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
-                      </Animated.View>
+                      <Text style={styles.videoWatermarkText}>{videoWatermarkText}</Text>
                     </View>
 
                     {/* Floating Exit Button when in Fullscreen or Landscape Mode */}
                     {isEffectiveFullscreen && (
                       <Pressable
-                        onPress={handleExitFullscreen}
+                        onPress={() => setIsVideoFullscreen(false)}
                         style={[
                           styles.floatingExitFullscreenBtn,
                           {
@@ -1477,14 +1440,14 @@ const styles = StyleSheet.create({
   },
   videoWatermarkText: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.28)',
+    color: 'rgba(255, 255, 255, 0.32)',
     fontFamily: 'Inter_600SemiBold',
-    transform: [{ rotate: '-12deg' }],
-    letterSpacing: 0.8,
-    textShadowColor: 'rgba(0, 0, 0, 0.85)',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
     textAlign: 'center',
+    paddingHorizontal: 20,
   },
   videoLoadingContainer: {
     ...StyleSheet.absoluteFill,

@@ -69,7 +69,6 @@
     "expo-image-manipulator": "~57.0.21",
     "expo-notifications": "~57.0.21",
     "expo-screen-capture": "^57.0.3",
-    "expo-screen-orientation": "~57.0.4",
     "firebase": "^12.19.0",
     "react": "19.2.3",
     "react-native": "0.86.3",
