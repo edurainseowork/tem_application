@@ -4,7 +4,7 @@ import * as ScreenCapture from 'expo-screen-capture';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, BackHandler, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   SUBMISSION_REASON_TEXT, TestApiError, choiceOptions, fetchTest, fetchTestQuestions, fetchTestResult, formatCountdown, formatTestTime,
@@ -104,7 +104,7 @@ export default function TestScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       {/* No swipe-back while writing; the hardware back button is handled inside the test */}
-      <Stack.Screen options={{ gestureEnabled: phase.kind !== 'taking' }} />
+      <Stack.Screen options={{ headerShown: false, gestureEnabled: phase.kind !== 'taking' }} />
       <StatusBar hidden={phase.kind === 'taking'} />
 
       {phase.kind === 'loading' && (
@@ -248,10 +248,13 @@ function TakingView({ testId, phase, topInset, bottomInset, onSubmitted }: {
   const [secondsLeft, setSecondsLeft] = useState(() => (endsAt - (Date.now() + clockOffset)) / 1000);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<{ reason: SubmissionReason; message: string } | null>(null);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [showBackModal, setShowBackModal] = useState(false);
   const submittedRef = useRef(false);
   // Starts from the server's count, so closing and reopening the app does not reset it
   const exitsRef = useRef(violations);
   const answersRef = useRef(answers);
+  const leftActiveRef = useRef(false);
   answersRef.current = answers;
 
   // Restore answers after the app was closed and the test resumed
@@ -301,31 +304,41 @@ function TakingView({ testId, phase, topInset, bottomInset, onSubmitted }: {
     return () => clearInterval(timer);
   }, [endsAt, clockOffset, finish]);
 
-  // Anti-cheat: leaving the app is reported to the server; first time a warning, then auto-submit
+  // Anti-cheat (NTA-Level): Minimizing the app, split-screen, or app-switching is strictly tracked
   useEffect(() => {
     let lastState = AppState.currentState;
     const subscription = AppState.addEventListener('change', (next) => {
       if (submittedRef.current) return;
-      if (lastState === 'active' && next === 'background') {
-        exitsRef.current += 1;
-        reportViolation(testId, 'APP_MINIMIZED')
-          .then((serverCount) => { exitsRef.current = Math.max(exitsRef.current, serverCount); })
-          .catch(() => undefined);
-      }
-      if (next === 'active' && lastState !== 'active') {
-        if (exitsRef.current >= MAX_APP_EXITS) {
-          finish('CHEATING_APP_MINIMIZED');
-        } else if (exitsRef.current > 0) {
-          const leftOver = MAX_APP_EXITS - exitsRef.current;
-          notify('Warning: you left the test', `Leaving the app is not allowed during the test. If you leave ${leftOver === 1 ? 'again' : `${leftOver} more times`}, your test will be submitted automatically.`);
+
+      // Detect leaving the active test window (minimize, split-screen, notification shade, app switch)
+      if (lastState === 'active' && (next === 'background' || next === 'inactive')) {
+        if (!leftActiveRef.current) {
+          leftActiveRef.current = true;
+          exitsRef.current += 1;
+          reportViolation(testId, 'APP_MINIMIZED')
+            .then((serverCount) => { exitsRef.current = Math.max(exitsRef.current, serverCount); })
+            .catch(() => undefined);
         }
       }
+
+      // Detect returning to active app focus
+      if (next === 'active' && leftActiveRef.current) {
+        leftActiveRef.current = false;
+        if (exitsRef.current >= MAX_APP_EXITS) {
+          // 2nd Attempt: Immediately auto-submits with Cheating flag
+          finish('CHEATING_APP_MINIMIZED');
+        } else if (exitsRef.current === 1) {
+          // 1st Attempt: Prominent red warning pop-up
+          setShowWarningModal(true);
+        }
+      }
+
       lastState = next;
     });
     return () => subscription.remove();
   }, [testId, finish]);
 
-  // Block screenshots and screen recording while the test is open
+  // Block screenshots and screen recording while the test is open (FLAG_SECURE)
   useEffect(() => {
     if (Platform.OS === 'web') return;
     ScreenCapture.preventScreenCaptureAsync('test').catch(() => undefined);
@@ -344,15 +357,15 @@ function TakingView({ testId, phase, topInset, bottomInset, onSubmitted }: {
     if (ok) finish('MANUAL_SUBMIT');
   }, [questions.length, answeredCount, finish]);
 
-  // Android back button: ask to submit instead of leaving
+  // Android back button: intercept and warn that back navigation is locked
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      askSubmit();
+      setShowBackModal(true);
       return true;
     });
     return () => sub.remove();
-  }, [askSubmit]);
+  }, []);
 
   const question = questions[current];
   const lowTime = secondsLeft <= 60;
@@ -441,6 +454,61 @@ function TakingView({ testId, phase, topInset, bottomInset, onSubmitted }: {
           <Text style={[styles.submitEarlyText, { color: colors.coral }]}>Submit test</Text>
         </Pressable>
       )}
+
+      {/* NTA Anti-Cheat Warning Modal (1st Attempt) */}
+      <Modal visible={showWarningModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.warningCard, { backgroundColor: '#1A0B0B', borderColor: '#EF4444' }]}>
+            <View style={styles.warningIconBadge}>
+              <Feather name="alert-triangle" size={38} color="#EF4444" />
+            </View>
+            <Text style={styles.warningTitle}>Warning 1/2: Do not minimize the app.</Text>
+            <Text style={styles.warningBody}>
+              Leaving the exam screen, minimizing the app, opening split-screen, or switching to other apps is strictly prohibited under exam conditions.
+            </Text>
+            <View style={styles.warningAlertBox}>
+              <Text style={styles.warningAlertText}>
+                ⚠️ Warning: If you minimize or leave the test 1 more time, your test will be immediately AUTO-SUBMITTED and flagged for Cheating.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setShowWarningModal(false)}
+              style={styles.warningButton}
+            >
+              <Text style={styles.warningButtonText}>I Understand — Return to Test</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Back Button Disabled Modal */}
+      <Modal visible={showBackModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.warningCard, { backgroundColor: '#111827', borderColor: '#6366F1' }]}>
+            <View style={[styles.warningIconBadge, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
+              <Feather name="shield" size={38} color="#818CF8" />
+            </View>
+            <Text style={[styles.warningTitle, { color: '#FFFFFF' }]}>Full-Screen Exam Mode Active</Text>
+            <Text style={styles.warningBody}>
+              Back navigation is strictly locked to prevent cheating. If you wish to finish your test, please complete all questions and use the Submit button.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              <Pressable
+                onPress={() => setShowBackModal(false)}
+                style={[styles.warningButton, { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)' }]}
+              >
+                <Text style={styles.warningButtonText}>Continue Test</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { setShowBackModal(false); askSubmit(); }}
+                style={[styles.warningButton, { flex: 1, backgroundColor: colors.coral }]}
+              >
+                <Text style={styles.warningButtonText}>Submit Now</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -577,4 +645,77 @@ const styles = StyleSheet.create({
   reviewPassage: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 16 },
   reviewQuestion: { fontFamily: 'Inter_600SemiBold', fontSize: 14, lineHeight: 20 },
   reviewLine: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 18 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  warningCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 25,
+  },
+  warningIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  warningTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 18,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  warningBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#E5E7EB',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  warningAlertBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 12,
+    padding: 12,
+    width: '100%',
+    marginBottom: 18,
+  },
+  warningAlertText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#FCA5A5',
+    textAlign: 'center',
+  },
+  warningButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warningButtonText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
 });

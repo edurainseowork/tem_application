@@ -233,8 +233,20 @@ function TestResults({ test, showToast }: { test: TestItem; showToast: (message:
 function ReasonBadge({ reason }: { reason: string | null }) {
   const cheating = reason?.startsWith('CHEATING')
   return (
-    <span style={{ ...badgeStyle, background: cheating ? '#ff5e5e' : reason === 'MANUAL_SUBMIT' ? 'rgba(29,154,120,0.7)' : 'rgba(255,255,255,0.15)' }}>
-      {reason ? SUBMISSION_REASON_LABELS[reason] ?? reason : '—'}
+    <span
+      style={{
+        ...badgeStyle,
+        background: cheating ? 'rgba(239, 68, 68, 0.2)' : reason === 'MANUAL_SUBMIT' ? 'rgba(29,154,120,0.7)' : 'rgba(255,255,255,0.15)',
+        border: cheating ? '1px solid #ef4444' : 'none',
+        color: cheating ? '#fca5a5' : 'white',
+        fontWeight: cheating ? 700 : 600,
+        padding: '4px 8px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+      }}
+    >
+      {cheating ? `🚨 ${SUBMISSION_REASON_LABELS[reason] ?? reason}` : (reason ? SUBMISSION_REASON_LABELS[reason] ?? reason : '—')}
     </span>
   )
 }

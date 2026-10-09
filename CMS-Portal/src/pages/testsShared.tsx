@@ -70,8 +70,8 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 export const SUBMISSION_REASON_LABELS: Record<string, string> = {
   MANUAL_SUBMIT: 'Submitted',
   TIME_EXPIRED: 'Time expired',
-  CHEATING_APP_MINIMIZED: 'Cheating: app minimized',
-  CHEATING_SCREEN_EXIT: 'Cheating: screen exit',
+  CHEATING_APP_MINIMIZED: 'Cheating - App Minimized',
+  CHEATING_SCREEN_EXIT: 'Cheating - Screen Exit',
   ADMIN_SUBMISSION: 'Closed by admin',
 }
 
