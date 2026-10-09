@@ -101,6 +101,7 @@ export function CourseContentScreen({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isLandscape = windowWidth > windowHeight;
   const isEffectiveFullscreen = isVideoFullscreen || isLandscape;
+  const isRotatedLandscape = isVideoFullscreen && !isLandscape;
 
   const handleToggleFullscreen = useCallback(() => {
     setIsVideoFullscreen((prev) => !prev);
@@ -301,10 +302,17 @@ export function CourseContentScreen({
     }
   };
 
-  // DRM Watermark text for In-App Sandboxed PDF Reader
+  // DRM Watermark text for In-App Sandboxed PDF Reader (Email + Phone + Protected Content)
   const pdfWatermarkText = useMemo(() => {
-    return user?.email || user?.uid ? `${user.email || user.uid} • Protected Content` : 'Student Access • Protected';
-  }, [user]);
+    const parts: string[] = [];
+    const mail = user?.email || auth.currentUser?.email;
+    if (mail) parts.push(mail);
+    const phone = userPhone || auth.currentUser?.phoneNumber;
+    if (phone) parts.push(phone);
+    if (parts.length === 0 && user?.uid) parts.push(user.uid);
+    parts.push('Protected Content');
+    return parts.join(' • ');
+  }, [user, userPhone]);
 
   // DRM Watermark text for Protected Video Player (Email + Phone + Protected Content)
   // "Mail aaye, aur protected content likha hua aaye. Mail ke saath-saath agar user ne number bhi diya hua hai na signup pe, Firebase pe, toh number bhi likh ke aaye... beech-o-beech mein, seedha, chhota sa"
@@ -319,37 +327,10 @@ export function CourseContentScreen({
     return parts.join(' • ');
   }, [user, userPhone]);
 
-  // Injected JavaScript for DOM-Level Static Centered Watermark & Fullscreen Interception
+  // Injected JavaScript for Fullscreen Interception (No duplicate DOM watermark)
   const injectedWatermarkScript = useMemo(() => {
     return `
       (function() {
-        function ensureWatermark() {
-          var el = document.getElementById('edurain-stream-watermark');
-          if (!el) {
-            el = document.createElement('div');
-            el.id = 'edurain-stream-watermark';
-            el.style.position = 'fixed';
-            el.style.top = '50%';
-            el.style.left = '50%';
-            el.style.transform = 'translate(-50%, -50%)';
-            el.style.pointerEvents = 'none';
-            el.style.zIndex = '2147483647';
-            el.style.color = 'rgba(255, 255, 255, 0.32)';
-            el.style.fontSize = '12px';
-            el.style.fontWeight = '600';
-            el.style.fontFamily = 'system-ui, -apple-system, sans-serif';
-            el.style.letterSpacing = '0.6px';
-            el.style.textShadow = '0 0 4px rgba(0,0,0,0.9)';
-            el.style.whiteSpace = 'nowrap';
-            el.style.userSelect = 'none';
-            el.style.webkitUserSelect = 'none';
-            el.innerText = ${JSON.stringify(videoWatermarkText)};
-            document.body.appendChild(el);
-          }
-        }
-        ensureWatermark();
-        setInterval(ensureWatermark, 1000);
-
         if (window.HTMLVideoElement && !window.__edurain_fs_intercepted) {
           window.__edurain_fs_intercepted = true;
           HTMLVideoElement.prototype.webkitEnterFullscreen = function() {
@@ -370,7 +351,7 @@ export function CourseContentScreen({
       })();
       true;
     `;
-  }, [videoWatermarkText]);
+  }, []);
 
   // Render Item for Student FlatList
   const renderItem = ({ item }: { item: ContentItem }) => {
@@ -877,17 +858,33 @@ export function CourseContentScreen({
 
                   <Pressable
                     onPress={handleToggleFullscreen}
-                    style={styles.videoHeaderFullscreenBtn}
+                    style={styles.videoHeaderLandscapeBtn}
                     hitSlop={8}
                   >
-                    <Feather name="maximize-2" size={18} color="#ffffff" />
+                    <Feather name="maximize-2" size={13} color="#ffffff" />
+                    <Text style={styles.videoHeaderLandscapeText}>Landscape</Text>
                   </Pressable>
                 </View>
               </View>
             )}
 
             {/* In-App Protected Video Player via Direct Native/Sandbox WebView */}
-            <View style={[styles.videoContainer, isEffectiveFullscreen && styles.videoContainerFullscreen]}>
+            <View
+              style={[
+                styles.videoContainer,
+                isEffectiveFullscreen && styles.videoContainerFullscreen,
+                isRotatedLandscape && {
+                  position: 'absolute',
+                  top: (windowHeight - windowWidth) / 2,
+                  left: (windowWidth - windowHeight) / 2,
+                  width: windowHeight,
+                  height: windowWidth,
+                  transform: [{ rotate: '90deg' }],
+                  zIndex: 9999,
+                  backgroundColor: '#000000',
+                },
+              ]}
+            >
               {selectedVideo.mediaUrl ? (() => {
                 const urlStr = selectedVideo.mediaUrl.trim();
                 const isBunny = urlStr.includes('mediadelivery.net') || urlStr.includes('b-cdn.net');
@@ -959,9 +956,15 @@ export function CourseContentScreen({
                       onShouldStartLoadWithRequest={() => true}
                     />
 
-                    {/* Dynamic Video DRM Watermark (Centered, Straight, Small, Static) */}
+                    {/* Single Clean DRM Watermark (Centered, Straight, Single Line) */}
                     <View pointerEvents="none" style={styles.videoWatermarkCenterContainer}>
-                      <Text style={styles.videoWatermarkText}>{videoWatermarkText}</Text>
+                      <Text
+                        style={styles.videoWatermarkText}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        {videoWatermarkText}
+                      </Text>
                     </View>
 
                     {/* Floating Exit Button when in Fullscreen or Landscape Mode */}
@@ -971,16 +974,14 @@ export function CourseContentScreen({
                         style={[
                           styles.floatingExitFullscreenBtn,
                           {
-                            top: Platform.OS === 'ios' ? Math.max(insets.top, 24) : insets.top + 12,
-                            left: Math.max(insets.left, 16),
+                            top: isRotatedLandscape ? 20 : (Platform.OS === 'ios' ? Math.max(insets.top, 24) : insets.top + 12),
+                            left: isRotatedLandscape ? 20 : Math.max(insets.left, 16),
                           },
                         ]}
                         hitSlop={10}
                       >
-                        <Feather name={isLandscape ? 'minimize-2' : 'chevron-left'} size={16} color="#ffffff" />
-                        <Text style={styles.floatingExitFullscreenText}>
-                          {isLandscape ? 'Portrait' : 'Exit Fullscreen'}
-                        </Text>
+                        <Feather name="minimize-2" size={16} color="#ffffff" />
+                        <Text style={styles.floatingExitFullscreenText}>Portrait</Text>
                       </Pressable>
                     )}
                   </View>
@@ -1405,13 +1406,21 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#000000',
   },
-  videoHeaderFullscreenBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  videoHeaderLandscapeBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  videoHeaderLandscapeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
   },
   floatingExitFullscreenBtn: {
     position: 'absolute',
@@ -1437,17 +1446,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 99,
+    paddingHorizontal: 20,
   },
   videoWatermarkText: {
-    fontSize: 12,
+    fontSize: 10.5,
     color: 'rgba(255, 255, 255, 0.32)',
-    fontFamily: 'Inter_600SemiBold',
-    letterSpacing: 0.5,
+    fontFamily: 'Inter_500Medium',
+    letterSpacing: 0.4,
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    textShadowRadius: 3,
     textAlign: 'center',
-    paddingHorizontal: 20,
   },
   videoLoadingContainer: {
     ...StyleSheet.absoluteFill,
