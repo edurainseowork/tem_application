@@ -408,8 +408,8 @@ export default function CourseContentManager({
       let finalMediaUrl = '';
 
       if (uploadType === 'video') {
-        // Stream directly to Vimeo via tus resumable upload protocol
-        const vimeoRes = await uploadTeacherVideo(
+        // Stream directly to Bunny Stream via tus resumable upload protocol
+        const videoRes = await uploadTeacherVideo(
           uploadFile,
           { title: uploadTitle.trim() },
           (percent) => {
@@ -417,7 +417,7 @@ export default function CourseContentManager({
           },
           abortController.signal
         );
-        finalMediaUrl = vimeoRes.playerUrl;
+        finalMediaUrl = videoRes.playerUrl;
       } else {
         // Step A: Request S3 Presigned URL for PDF
         const mimeType = (uploadFile.type || 'application/pdf').toLowerCase().trim().split(';')[0];
@@ -564,14 +564,14 @@ export default function CourseContentManager({
       let finalMediaUrl = '';
 
       if (itemToReplace.type === 'video') {
-        const vimeoRes = await uploadTeacherVideo(
+        const videoRes = await uploadTeacherVideo(
           replaceFile,
           { title: itemToReplace.title },
           (pct) => {
             setReplaceProgress(pct);
           }
         );
-        finalMediaUrl = vimeoRes.playerUrl;
+        finalMediaUrl = videoRes.playerUrl;
       } else {
         const mimeType =
           replaceFile.type ||

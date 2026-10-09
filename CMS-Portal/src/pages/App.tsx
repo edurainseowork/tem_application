@@ -243,7 +243,7 @@ function App() {
             Categories
           </div>
           <div className={`nav-link ${activeTab === 'content' ? 'active' : ''}`} onClick={() => setActiveTab('content')}>
-            Upload Content (PDF/Video/Test)
+            Upload Content (PDF/Video)
           </div>
           <div className={`nav-link ${activeTab === 'banners' ? 'active' : ''}`} onClick={() => setActiveTab('banners')}>
             Manage Banners
@@ -330,23 +330,6 @@ function App() {
               onSelectCourse={setSelectedCourseForContent}
               showToast={showToast}
             />
-
-            <div className="glass-card">
-              <h3 style={{ marginBottom: 'var(--space-md)' }}>Create Weekly Test / Quiz</h3>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-md)', fontSize: '0.9rem' }}>
-                Note: In the app, this test will open in strict Full-Screen mode. If the user presses back, the test will end automatically and score will be submitted to AWS.
-              </p>
-              <form style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                <input type="text" placeholder="Test Title (e.g. Thermodynamics Week 1)" style={{ padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                <textarea rows={3} placeholder="Question 1 (Text format)" style={{ padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                  <input type="text" placeholder="Option A" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                  <input type="text" placeholder="Option B" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }} />
-                </div>
-                <button type="button" className="btn" style={{ alignSelf: 'flex-start', marginTop: 'var(--space-sm)', background: 'transparent', border: '1px solid var(--accent-primary)', color: 'var(--accent-primary)' }}>+ Add Next Question</button>
-                <button type="button" className="btn" style={{ alignSelf: 'flex-start', marginTop: 'var(--space-md)' }}>Publish Test</button>
-              </form>
-            </div>
           </div>
         )}
 
