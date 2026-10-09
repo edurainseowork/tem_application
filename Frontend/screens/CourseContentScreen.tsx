@@ -765,7 +765,7 @@ export function CourseContentScreen({
               </View>
             </View>
 
-            {/* In-App Protected Video Player via Sandboxed HTML5 WebView */}
+            {/* In-App Protected Video Player via Direct Native/Sandbox WebView */}
             <View style={styles.videoContainer}>
               {selectedVideo.mediaUrl ? (() => {
                 const urlStr = selectedVideo.mediaUrl.trim();
@@ -775,15 +775,20 @@ export function CourseContentScreen({
 
                 if (isBunny) {
                   if (urlStr.includes('/embed/')) {
-                    embedUrl = urlStr.includes('autoplay')
+                    embedUrl = urlStr.includes('preload')
                       ? urlStr
-                      : `${urlStr}${urlStr.includes('?') ? '&' : '?'}autoplay=true&preload=true`;
+                      : `${urlStr}${urlStr.includes('?') ? '&' : '?'}preload=true&responsive=true`;
                   } else {
                     const match = urlStr.match(/mediadelivery\.net\/(?:embed|play)\/([^/?#]+)\/([^/?#]+)/);
                     if (match) {
-                      embedUrl = `https://iframe.mediadelivery.net/embed/${match[1]}/${match[2]}?autoplay=true&preload=true`;
+                      embedUrl = `https://iframe.mediadelivery.net/embed/${match[1]}/${match[2]}?preload=true&responsive=true`;
                     } else {
-                      embedUrl = urlStr;
+                      const guidMatch = urlStr.match(/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/);
+                      if (guidMatch) {
+                        embedUrl = `https://iframe.mediadelivery.net/embed/775402/${guidMatch[1]}?preload=true&responsive=true`;
+                      } else {
+                        embedUrl = urlStr;
+                      }
                     }
                   }
                 } else if (isVimeo) {
@@ -793,68 +798,44 @@ export function CourseContentScreen({
                 }
 
                 return (
-                  <WebView
-                    style={styles.videoWebView}
-                    originWhitelist={['*']}
-                    allowsInlineMediaPlayback
-                    mediaPlaybackRequiresUserAction={false}
-                    javaScriptEnabled
-                    domStorageEnabled
-                    source={{
-                      html: `
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                          <style>
-                            * { margin: 0; padding: 0; box-sizing: border-box; }
-                            body {
-                              background-color: #0b0f19;
-                              display: flex;
-                              justify-content: center;
-                              align-items: center;
-                              height: 100vh;
-                              overflow: hidden;
-                              user-select: none;
-                              -webkit-user-select: none;
+                  <View style={styles.videoPlayerContainer}>
+                    <WebView
+                      style={styles.videoWebView}
+                      originWhitelist={['*']}
+                      allowsInlineMediaPlayback={true}
+                      allowsFullscreenVideo={true}
+                      allowsAirPlayForMediaPlayback={true}
+                      mediaPlaybackRequiresUserAction={false}
+                      javaScriptEnabled={true}
+                      domStorageEnabled={true}
+                      mixedContentMode="always"
+                      bounces={false}
+                      scrollEnabled={false}
+                      startInLoadingState={true}
+                      renderLoading={() => (
+                        <View style={styles.videoLoadingContainer}>
+                          <ActivityIndicator size="large" color={colors.coral} />
+                          <Text style={styles.videoLoadingText}>Loading secure stream...</Text>
+                        </View>
+                      )}
+                      source={
+                        embedUrl
+                          ? { uri: embedUrl }
+                          : {
+                              html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { background-color: #0b0f19; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; } video { width: 100%; height: 100%; max-height: 100vh; object-fit: contain; }</style></head><body oncontextmenu="return false;"><video src="${urlStr}" controls playsinline webkit-playsinline autoplay controlsList="nodownload noplaybackrate"></video></body></html>`,
+                              baseUrl: 'https://iframe.mediadelivery.net',
                             }
-                            iframe, video {
-                              width: 100%;
-                              height: 100%;
-                              max-height: 100vh;
-                              border: none;
-                              outline: none;
-                            }
-                            video {
-                              object-fit: contain;
-                            }
-                            .watermark {
-                              position: fixed;
-                              top: 25%;
-                              left: 18%;
-                              color: rgba(255, 255, 255, 0.16);
-                              font-size: 14px;
-                              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                              font-weight: 600;
-                              pointer-events: none;
-                              z-index: 9999;
-                              transform: rotate(-20deg);
-                              letter-spacing: 1px;
-                            }
-                          </style>
-                        </head>
-                        <body oncontextmenu="return false;">
-                          <div class="watermark">${watermarkText}</div>
-                          ${embedUrl
-                          ? `<iframe src="${embedUrl}" frameborder="0" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`
-                          : `<video src="${selectedVideo.mediaUrl}" controls controlsList="nodownload noplaybackrate" playsinline autoplay></video>`
-                        }
-                        </body>
-                        </html>
-                      `,
-                    }}
-                    onShouldStartLoadWithRequest={() => true}
-                  />
+                      }
+                      onShouldStartLoadWithRequest={() => true}
+                    />
+
+                    {/* Dynamic Screen Watermark (anti-leak / deterrent) */}
+                    <View pointerEvents="none" style={styles.videoWatermarkOverlay}>
+                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
+                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
+                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
+                    </View>
+                  </View>
                 );
               })() : (
                 <View style={styles.centerBox}>
@@ -1265,6 +1246,37 @@ const styles = StyleSheet.create({
   videoContainer: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  videoPlayerContainer: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: '#000000',
+  },
+  videoWatermarkOverlay: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 50,
+    zIndex: 99,
+  },
+  videoWatermarkText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.16)',
+    fontFamily: 'Inter_700Bold',
+    transform: [{ rotate: '-20deg' }],
+    letterSpacing: 1,
+  },
+  videoLoadingContainer: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0b0f19',
+  },
+  videoLoadingText: {
+    marginTop: 10,
+    color: '#94a3b8',
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
   },
   videoWebView: {
     flex: 1,
