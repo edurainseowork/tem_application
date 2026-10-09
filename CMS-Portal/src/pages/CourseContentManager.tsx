@@ -1047,7 +1047,7 @@ export default function CourseContentManager({
             </div>
 
             <p style={styles.modalSubtitle}>
-              Uploading directly to {uploadType === 'video' ? 'Vimeo Video Hosting (tus resumable upload)' : 'Amazon S3 storage'} under{' '}
+              Uploading directly to {uploadType === 'video' ? 'Bunny.net Stream (Fast Resumable Upload)' : 'Amazon S3 storage'} under{' '}
               <strong>{currentFolder ? currentFolder.title : 'Root'}</strong>.
             </p>
 

@@ -769,12 +769,27 @@ export function CourseContentScreen({
             <View style={styles.videoContainer}>
               {selectedVideo.mediaUrl ? (() => {
                 const urlStr = selectedVideo.mediaUrl.trim();
-                const isVimeo = urlStr.includes('vimeo.com') || /^\d+$/.test(urlStr);
-                let vimeoEmbedUrl = '';
-                if (isVimeo) {
+                const isBunny = urlStr.includes('mediadelivery.net') || urlStr.includes('b-cdn.net');
+                const isVimeo = urlStr.includes('vimeo.com');
+                let embedUrl = '';
+
+                if (isBunny) {
+                  if (urlStr.includes('/embed/')) {
+                    embedUrl = urlStr.includes('autoplay')
+                      ? urlStr
+                      : `${urlStr}${urlStr.includes('?') ? '&' : '?'}autoplay=true&preload=true`;
+                  } else {
+                    const match = urlStr.match(/mediadelivery\.net\/(?:embed|play)\/([^/?#]+)\/([^/?#]+)/);
+                    if (match) {
+                      embedUrl = `https://iframe.mediadelivery.net/embed/${match[1]}/${match[2]}?autoplay=true&preload=true`;
+                    } else {
+                      embedUrl = urlStr;
+                    }
+                  }
+                } else if (isVimeo) {
                   const cleaned = urlStr.split('?')[0].split('#')[0];
                   const vimeoId = cleaned.split('/').filter(Boolean).pop() || '';
-                  vimeoEmbedUrl = vimeoId ? `https://player.vimeo.com/video/${vimeoId}?badge=0&autopause=0&player_id=0&autoplay=1` : '';
+                  embedUrl = vimeoId ? `https://player.vimeo.com/video/${vimeoId}?badge=0&autopause=0&player_id=0&autoplay=1` : '';
                 }
 
                 return (
@@ -830,8 +845,8 @@ export function CourseContentScreen({
                         </head>
                         <body oncontextmenu="return false;">
                           <div class="watermark">${watermarkText}</div>
-                          ${isVimeo && vimeoEmbedUrl
-                          ? `<iframe src="${vimeoEmbedUrl}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`
+                          ${embedUrl
+                          ? `<iframe src="${embedUrl}" frameborder="0" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`
                           : `<video src="${selectedVideo.mediaUrl}" controls controlsList="nodownload noplaybackrate" playsinline autoplay></video>`
                         }
                         </body>
