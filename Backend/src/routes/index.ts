@@ -15,7 +15,7 @@ import notificationsRouter from "./notifications.js";
 import enrollmentsRouter from "./enrollments.js";
 import adminNotificationsRouter from "./adminNotifications.js";
 import profileRouter from "./profile.js"
-import vimeoRouter from "./vimeo.routes.js";
+import bunnyRouter from "./bunny.routes.js";
 import cmsTestsRouter from "./cmsTests.js";
 import testsRouter from "./tests.js";
 
@@ -42,6 +42,6 @@ router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);
 // Admin notifications for the app (separate from the live class notifications above)
 router.use("/admin-notifications", adminNotificationsRouter);
-router.use(vimeoRouter);
+router.use(bunnyRouter);
 
 export default router;
