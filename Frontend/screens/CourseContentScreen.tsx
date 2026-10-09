@@ -71,6 +71,7 @@ export function CourseContentScreen({
   // Active Viewing Modals (In-App PDF Reader & Protected Video Player)
   const [selectedPdf, setSelectedPdf] = useState<ContentItem | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<ContentItem | null>(null);
+  const [isVideoFullscreen, setIsVideoFullscreen] = useState<boolean>(false);
   const [selectedNote, setSelectedNote] = useState<ContentItem | null>(null);
 
   // Load Sandboxed Offline PDF metadata from AsyncStorage
@@ -272,6 +273,69 @@ export function CourseContentScreen({
   const watermarkText = useMemo(() => {
     return user?.email || user?.uid ? `${user.email || user.uid} • Protected Content` : 'Student Access • Protected';
   }, [user]);
+
+  // Injected JavaScript for DOM-Level DRM Watermark & Fullscreen Interception
+  const injectedWatermarkScript = useMemo(() => {
+    return `
+      (function() {
+        function ensureWatermark() {
+          var el = document.getElementById('edurain-stream-watermark');
+          if (!el) {
+            el = document.createElement('div');
+            el.id = 'edurain-stream-watermark';
+            el.style.position = 'fixed';
+            el.style.top = '0';
+            el.style.left = '0';
+            el.style.width = '100vw';
+            el.style.height = '100vh';
+            el.style.pointerEvents = 'none';
+            el.style.zIndex = '2147483647';
+            el.style.display = 'flex';
+            el.style.flexDirection = 'column';
+            el.style.justifyContent = 'space-around';
+            el.style.alignItems = 'center';
+            el.style.userSelect = 'none';
+            el.style.webkitUserSelect = 'none';
+            
+            for (var i = 0; i < 4; i++) {
+              var t = document.createElement('div');
+              t.innerText = ${JSON.stringify(watermarkText)};
+              t.style.color = 'rgba(255, 255, 255, 0.35)';
+              t.style.fontSize = '15px';
+              t.style.fontWeight = '700';
+              t.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+              t.style.transform = 'rotate(-25deg)';
+              t.style.letterSpacing = '1px';
+              t.style.textShadow = '0 0 6px rgba(0,0,0,0.9)';
+              el.appendChild(t);
+            }
+            document.body.appendChild(el);
+          }
+        }
+        ensureWatermark();
+        setInterval(ensureWatermark, 1000);
+
+        if (window.HTMLVideoElement && !window.__edurain_fs_intercepted) {
+          window.__edurain_fs_intercepted = true;
+          HTMLVideoElement.prototype.webkitEnterFullscreen = function() {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOGGLE_FULLSCREEN' }));
+            }
+          };
+        }
+        if (document.documentElement && !document.documentElement.__edurain_fs) {
+          document.documentElement.__edurain_fs = true;
+          document.documentElement.requestFullscreen = function() {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TOGGLE_FULLSCREEN' }));
+            }
+            return Promise.resolve();
+          };
+        }
+      })();
+      true;
+    `;
+  }, [watermarkText]);
 
   // Render Item for Student FlatList
   const renderItem = ({ item }: { item: ContentItem }) => {
@@ -732,41 +796,62 @@ export function CourseContentScreen({
           visible={Boolean(selectedVideo)}
           animationType="fade"
           presentationStyle="fullScreen"
-          onRequestClose={() => setSelectedVideo(null)}
+          onRequestClose={() => {
+            if (isVideoFullscreen) {
+              setIsVideoFullscreen(false);
+            } else {
+              setSelectedVideo(null);
+            }
+          }}
         >
           <View style={styles.videoPlayerScreen}>
-            {/* Player Top Navigation */}
-            <View
-              style={[
-                styles.videoPlayerHeader,
-                { paddingTop: Platform.OS === 'ios' ? 44 : insets.top + 8 },
-              ]}
-            >
-              <Pressable
-                onPress={() => setSelectedVideo(null)}
-                style={styles.videoCloseBtn}
-                hitSlop={10}
+            {/* Player Top Navigation (Hidden in Fullscreen) */}
+            {!isVideoFullscreen && (
+              <View
+                style={[
+                  styles.videoPlayerHeader,
+                  { paddingTop: Platform.OS === 'ios' ? 44 : insets.top + 8 },
+                ]}
               >
-                <Feather name="chevron-left" size={26} color="#ffffff" />
-              </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setIsVideoFullscreen(false);
+                    setSelectedVideo(null);
+                  }}
+                  style={styles.videoCloseBtn}
+                  hitSlop={10}
+                >
+                  <Feather name="chevron-left" size={26} color="#ffffff" />
+                </Pressable>
 
-              <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                <Text style={styles.videoPlayerTitle} numberOfLines={1}>
-                  {selectedVideo.title}
-                </Text>
-                <Text style={styles.videoPlayerSubtitle}>
-                  Protected In-App Lecture Player
-                </Text>
-              </View>
+                <View style={{ flex: 1, paddingHorizontal: 12 }}>
+                  <Text style={styles.videoPlayerTitle} numberOfLines={1}>
+                    {selectedVideo.title}
+                  </Text>
+                  <Text style={styles.videoPlayerSubtitle}>
+                    Protected In-App Lecture Player
+                  </Text>
+                </View>
 
-              <View style={styles.drmBadge}>
-                <Feather name="shield" size={12} color="#4ade80" />
-                <Text style={styles.drmBadgeText}>DRM</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={styles.drmBadge}>
+                    <Feather name="shield" size={12} color="#4ade80" />
+                    <Text style={styles.drmBadgeText}>DRM</Text>
+                  </View>
+
+                  <Pressable
+                    onPress={() => setIsVideoFullscreen(true)}
+                    style={styles.videoHeaderFullscreenBtn}
+                    hitSlop={8}
+                  >
+                    <Feather name="maximize-2" size={18} color="#ffffff" />
+                  </Pressable>
+                </View>
               </View>
-            </View>
+            )}
 
             {/* In-App Protected Video Player via Direct Native/Sandbox WebView */}
-            <View style={styles.videoContainer}>
+            <View style={[styles.videoContainer, isVideoFullscreen && styles.videoContainerFullscreen]}>
               {selectedVideo.mediaUrl ? (() => {
                 const urlStr = selectedVideo.mediaUrl.trim();
                 const isBunny = urlStr.includes('mediadelivery.net') || urlStr.includes('b-cdn.net');
@@ -803,7 +888,7 @@ export function CourseContentScreen({
                       style={styles.videoWebView}
                       originWhitelist={['*']}
                       allowsInlineMediaPlayback={true}
-                      allowsFullscreenVideo={true}
+                      allowsFullscreenVideo={Platform.OS === 'android'}
                       allowsAirPlayForMediaPlayback={true}
                       mediaPlaybackRequiresUserAction={false}
                       javaScriptEnabled={true}
@@ -811,6 +896,15 @@ export function CourseContentScreen({
                       mixedContentMode="always"
                       bounces={false}
                       scrollEnabled={false}
+                      injectedJavaScript={injectedWatermarkScript}
+                      onMessage={(event) => {
+                        try {
+                          const msg = JSON.parse(event.nativeEvent.data);
+                          if (msg?.type === 'TOGGLE_FULLSCREEN') {
+                            setIsVideoFullscreen((prev) => !prev);
+                          }
+                        } catch {}
+                      }}
                       startInLoadingState={true}
                       renderLoading={() => (
                         <View style={styles.videoLoadingContainer}>
@@ -822,19 +916,35 @@ export function CourseContentScreen({
                         embedUrl
                           ? { uri: embedUrl }
                           : {
-                              html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { background-color: #0b0f19; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; } video { width: 100%; height: 100%; max-height: 100vh; object-fit: contain; }</style></head><body oncontextmenu="return false;"><video src="${urlStr}" controls playsinline webkit-playsinline autoplay controlsList="nodownload noplaybackrate"></video></body></html>`,
+                              html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><style>* { margin: 0; padding: 0; } body { background-color: #0b0f19; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; } video { width: 100%; height: 100%; max-height: 100vh; object-fit: contain; }</style></head><body oncontextmenu="return false;"><video src="${urlStr}" controls playsinline webkit-playsinline autoplay controlsList="nodownload noplaybackrate"></video></body></html>`,
                               baseUrl: 'https://iframe.mediadelivery.net',
                             }
                       }
                       onShouldStartLoadWithRequest={() => true}
                     />
 
-                    {/* Dynamic Screen Watermark (anti-leak / deterrent) */}
+                    {/* Dynamic High-Visibility Screen Watermark (anti-leak / deterrent) */}
                     <View pointerEvents="none" style={styles.videoWatermarkOverlay}>
                       <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
                       <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
                       <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
+                      <Text style={styles.videoWatermarkText}>{watermarkText}</Text>
                     </View>
+
+                    {/* Floating Exit Fullscreen Button when in Fullscreen Mode */}
+                    {isVideoFullscreen && (
+                      <Pressable
+                        onPress={() => setIsVideoFullscreen(false)}
+                        style={[
+                          styles.floatingExitFullscreenBtn,
+                          { top: Platform.OS === 'ios' ? 48 : insets.top + 16 },
+                        ]}
+                        hitSlop={10}
+                      >
+                        <Feather name="minimize-2" size={18} color="#ffffff" />
+                        <Text style={styles.floatingExitFullscreenText}>Exit Fullscreen</Text>
+                      </Pressable>
+                    )}
                   </View>
                 );
               })() : (
@@ -848,17 +958,19 @@ export function CourseContentScreen({
               )}
             </View>
 
-            {/* Bottom Playback Info */}
-            <View
-              style={[
-                styles.videoFooter,
-                { paddingBottom: Math.max(insets.bottom, 16) },
-              ]}
-            >
-              <Text style={styles.videoFooterText}>
-                Encrypted Session • Screen captures and downloads are strictly restricted
-              </Text>
-            </View>
+            {/* Bottom Playback Info (Hidden in Fullscreen) */}
+            {!isVideoFullscreen && (
+              <View
+                style={[
+                  styles.videoFooter,
+                  { paddingBottom: Math.max(insets.bottom, 16) },
+                ]}
+              >
+                <Text style={styles.videoFooterText}>
+                  Encrypted Session • Screen captures and downloads are strictly restricted
+                </Text>
+              </View>
+            )}
           </View>
         </Modal>
       )}
@@ -1247,24 +1359,57 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
+  videoContainerFullscreen: {
+    backgroundColor: '#000000',
+  },
   videoPlayerContainer: {
     flex: 1,
     position: 'relative',
     backgroundColor: '#000000',
   },
+  videoHeaderFullscreenBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingExitFullscreenBtn: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  floatingExitFullscreenText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
   videoWatermarkOverlay: {
     ...StyleSheet.absoluteFill,
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: 40,
     zIndex: 99,
   },
   videoWatermarkText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.16)',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.38)',
     fontFamily: 'Inter_700Bold',
-    transform: [{ rotate: '-20deg' }],
-    letterSpacing: 1,
+    transform: [{ rotate: '-22deg' }],
+    letterSpacing: 1.2,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
   },
   videoLoadingContainer: {
     ...StyleSheet.absoluteFill,
