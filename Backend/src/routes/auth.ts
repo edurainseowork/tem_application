@@ -1,9 +1,13 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { getAuth } from '../lib/firebaseAdmin.js';
+import type { UserRecord } from 'firebase-admin/auth';
 import { authenticateToken, extractUserRole } from '../middleware/auth';
+import { hasPrivilegedClaims, isSuperAdminEmail, isSuperAdminToken } from '../lib/superAdmin';
 
 export const authRouter = Router();
+
+const isPrivilegedAccount = (user: UserRecord) => hasPrivilegedClaims(user.customClaims) || isSuperAdminEmail(user.email);
 const MSG91_AUTH_KEY = '575019AGrL1JB46ab9222dP1';
 
 /**
@@ -20,6 +24,9 @@ authRouter.get('/me', authenticateToken, async (req: Request, res: Response): Pr
       name: req.user?.name || req.auth?.name,
       role,
       isAdminOrFaculty: role === 'admin' || role === 'faculty',
+            // Decided here from the verified token; the CMS only uses it to show or hide controls
+            isSuperAdmin: isSuperAdminToken(req.auth),
+            superAdminEmailUnverified: isSuperAdminEmail(req.auth?.email) && req.auth?.email_verified !== true,
     },
   });
 });
@@ -56,6 +63,10 @@ authRouter.post('/verify-otp-and-signup', async (req: Request, res: Response): P
       console.error('MSG91 Verify Error:', msg91Error?.response?.data || msg91Error.message);
       return res.status(400).json({ error: 'Failed to verify OTP with MSG91' });
     }
+    // App sign-up must never take over a CMS account (Super Admin, admins, faculty)
+    if (isSuperAdminEmail(email)) {
+      return res.status(409).json({ error: 'An account with this email already exists. Please log in.' });
+    }
 
     // Create or Update user in Firebase with Email, Password, and Phone Number
     const phoneWithCode = phone.startsWith('+') ? phone : `+91${phone}`;
@@ -70,6 +81,9 @@ authRouter.post('/verify-otp-and-signup', async (req: Request, res: Response): P
       if (error.code === 'auth/email-already-in-use' || error.code === 'auth/phone-number-already-exists') {
         try {
           const existingUser = await getAuth().getUserByEmail(email.trim());
+          if (isPrivilegedAccount(existingUser)) {
+            return res.status(409).json({ error: 'An account with this email already exists. Please log in.' });
+          }
           await getAuth().updateUser(existingUser.uid, {
             password: password,
             phoneNumber: phoneWithCode,
@@ -78,6 +92,9 @@ authRouter.post('/verify-otp-and-signup', async (req: Request, res: Response): P
         } catch (updateErr) {
           try {
             const existingUserByPhone = await getAuth().getUserByPhoneNumber(phoneWithCode);
+            if (isPrivilegedAccount(existingUserByPhone)) {
+              return res.status(409).json({ error: 'An account with this phone number already exists. Please log in.' });
+            }
             await getAuth().updateUser(existingUserByPhone.uid, {
               email: email.trim(),
               password: password,

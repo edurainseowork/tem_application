@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut, type User } from 'firebase/auth'
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification, type User } from 'firebase/auth'
 import { auth } from '../firebase'
 import { apiFetch, uploadFile, API_BASE_URL, type AdminCourse } from '../api'
 import CourseManager from './CourseManager'
@@ -10,9 +10,16 @@ import Coupons from './Coupons'
 import GoLive from './GoLive'
 import Notifications from './Notifications'
 import Tests from './Tests'
+import ManageAdmins from './ManageAdmins'
 import '../index.css'
 
+type MeInfo = { isSuperAdmin: boolean; superAdminEmailUnverified: boolean }
+
 function App() {
+  // Whether to show Super Admin controls. Decided by the backend from the verified token;
+  // every admin-management API checks it again on its own.
+  const [me, setMe] = useState<MeInfo>({ isSuperAdmin: false, superAdminEmailUnverified: false });
+  const [openCreateAdmin, setOpenCreateAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('courses');
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
@@ -77,6 +84,42 @@ function App() {
     } catch (e) {
       console.error("Failed to fetch stats", e);
     }
+  };
+  const fetchMe = async () => {
+    try {
+      const data = await apiFetch<{ user?: Partial<MeInfo> }>('/auth/me');
+      setMe({ isSuperAdmin: data.user?.isSuperAdmin === true, superAdminEmailUnverified: data.user?.superAdminEmailUnverified === true });
+    } catch {
+      setMe({ isSuperAdmin: false, superAdminEmailUnverified: false });
+    }
+  };
+
+  useEffect(() => {
+    if (user) fetchMe();
+    else setMe({ isSuperAdmin: false, superAdminEmailUnverified: false });
+  }, [user]);
+
+  // Leave the admin page if the signed-in account is not the Super Admin
+  useEffect(() => {
+    if (activeTab === 'admins' && !me.isSuperAdmin) setActiveTab('dashboard');
+  }, [activeTab, me.isSuperAdmin]);
+
+  const handleSendVerification = async () => {
+    if (!auth.currentUser) return;
+    try {
+      await sendEmailVerification(auth.currentUser);
+      showToast(`Verification email sent to ${auth.currentUser.email}`, 'success');
+    } catch (e: any) {
+      showToast('Could not send the verification email: ' + (e?.message || e?.code), 'error');
+    }
+  };
+
+  const handleVerifiedCheck = async () => {
+    if (!auth.currentUser) return;
+    await auth.currentUser.reload();
+    await auth.currentUser.getIdToken(true);
+    await fetchMe();
+    if (!auth.currentUser.emailVerified) showToast('Email not verified yet — open the link in the verification email first', 'error');
   };
 
   useEffect(() => {
@@ -260,6 +303,11 @@ function App() {
           <div className={`nav-link ${activeTab === 'tests' ? 'active' : ''}`} onClick={() => setActiveTab('tests')}>
             Tests
           </div>
+          {me.isSuperAdmin && (
+            <div className={`nav-link ${activeTab === 'admins' ? 'active' : ''}`} onClick={() => setActiveTab('admins')}>
+              Manage Admins
+            </div>
+          )}
         </nav>
       </aside>
 
@@ -276,12 +324,33 @@ function App() {
             {activeTab === 'golive' && 'Live Classes'}
             {activeTab === 'notifications' && 'Notifications'}
             {activeTab === 'tests' && 'Test Management'}
+            {activeTab === 'admins' && 'Manage Admins'}
           </h1>
           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+          {me.isSuperAdmin && (
+              <button
+                onClick={() => { setActiveTab('admins'); setOpenCreateAdmin(true); }}
+                className="btn"
+                style={{ padding: '6px 12px' }}
+              >
+                + Create Admin
+              </button>
+            )}
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</span>
             <button onClick={() => signOut(auth)} className="btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px' }}>Logout</button>
           </div>
         </header>
+        {me.superAdminEmailUnverified && (
+          <div className="glass-card" role="status" style={{ marginBottom: 'var(--space-lg)', border: '1px solid rgba(214,158,46,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <p style={{ color: 'white', fontSize: '0.9rem', lineHeight: 1.5 }}>
+              Verify your email address to unlock admin management (Create Admin, Manage Admins).
+            </p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button className="btn" style={{ padding: '6px 12px' }} onClick={handleSendVerification}>Send Verification Email</button>
+              <button className="btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px' }} onClick={handleVerifiedCheck}>I've Verified</button>
+            </div>
+          </div>
+        )}
 
         {activeTab === 'dashboard' && (
           <>
@@ -391,6 +460,13 @@ function App() {
         {activeTab === 'tests' && (
           <Tests showToast={showToast} />
         )}
+        {activeTab === 'admins' && me.isSuperAdmin && (
+          <ManageAdmins
+            showToast={showToast}
+            openCreate={openCreateAdmin}
+            onCreateOpened={() => setOpenCreateAdmin(false)}
+          />
+        )}        
       </main>
     </div>
   </RoleGuard>

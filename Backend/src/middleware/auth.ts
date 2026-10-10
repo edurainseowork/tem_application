@@ -6,7 +6,7 @@ import { db } from "../db";
 import { users as usersTable, userCourses as userCoursesTable } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { parseId } from "../lib/http-error";
-
+import { hasPrivilegedClaims, isSuperAdminEmail, isSuperAdminToken } from "../lib/superAdmin";
 export type DbUser = typeof usersTable.$inferSelect;
 
 declare global {
@@ -39,7 +39,8 @@ export async function syncOrLookupUser(decoded: DecodedIdToken): Promise<DbUser 
 
   const decodedRole =
     (decoded.role as string) ||
-    (decoded.admin ? "admin" : decoded.faculty ? "faculty" : undefined);
+    (decoded.admin ? "admin" : decoded.faculty ? "faculty" : undefined) ||
+    (isSuperAdminToken(decoded) ? "admin" : undefined);
 
   try {
     let [existing] = await db
@@ -111,6 +112,10 @@ export async function syncOrLookupUser(decoded: DecodedIdToken): Promise<DbUser 
   }
 }
 
+// Fixed test tokens ("admin", "faculty", "test-student-N", ...) are for local development only.
+// In production they would let anyone call the API as an admin.
+const allowMockTokens = process.env.NODE_ENV !== "production";
+
 /**
  * Verifies the token using Firebase Admin SDK or local mock credentials for testing.
  */
@@ -119,7 +124,9 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
   if (!token) return null;
 
   // Development & testing mock tokens
-  if (token === "admin" || token === "test-admin" || token === "mock-admin-token") {
+  if (!allowMockTokens) {
+    // fall through to Firebase verification
+  } else if (token === "admin" || token === "test-admin" || token === "mock-admin-token") {
     return {
       uid: "test-admin-uid",
       email: "admin@edurain.in",
@@ -127,9 +134,7 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
       admin: true,
       role: "admin",
     } as unknown as DecodedIdToken;
-  }
-
-  if (token === "faculty" || token === "test-faculty" || token === "mock-faculty-token") {
+  } else if (token === "faculty" || token === "test-faculty" || token === "mock-faculty-token") {
     return {
       uid: "test-faculty-uid",
       email: "faculty@edurain.in",
@@ -137,18 +142,14 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
       faculty: true,
       role: "faculty",
     } as unknown as DecodedIdToken;
-  }
-
-  if (token === "student" || token === "test-student" || token === "mock-student-token") {
+  } else if (token === "student" || token === "test-student" || token === "mock-student-token") {
     return {
       uid: "test-student-uid",
       email: "student@edurain.in",
       name: "Student User",
       role: "student",
     } as unknown as DecodedIdToken;
-  }
-
-  if (token.startsWith("test-student-")) {
+  } else if (token.startsWith("test-student-")) {
     const studentId = token.replace("test-student-", "");
     return {
       uid: `test-student-uid-${studentId}`,
@@ -159,7 +160,13 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
   }
 
   try {
-    return await firebaseAuth.verifyIdToken(token, checkRevoked);
+    const decoded = await firebaseAuth.verifyIdToken(token, checkRevoked);
+    // Tokens that carry CMS privileges are always checked for revocation, so a deleted or
+    // demoted admin cannot keep using a token issued before the change (valid for up to 1 hour).
+    if (!checkRevoked && (hasPrivilegedClaims(decoded) || isSuperAdminEmail(decoded.email))) {
+      await firebaseAuth.verifyIdToken(token, true);
+    }
+    return decoded;
   } catch (err) {
     logger.warn({ code: (err as { code?: string }).code }, "Rejected Firebase ID token");
     return null;
@@ -175,6 +182,9 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
  */
 export function extractUserRole(req: Request): "admin" | "faculty" | "student" | string {
   // 1. Check database user record if loaded
+    // 0. The verified Super Admin is always an admin
+    if (isSuperAdminToken(req.auth)) return "admin";
+
   if (req.user?.role) {
     const dbRole = req.user.role.trim().toLowerCase();
     if (dbRole === "admin" || dbRole === "faculty" || dbRole === "student") {
@@ -235,6 +245,7 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
 /** Check if token holds admin privileges */
 export function isAdmin(token: DecodedIdToken | undefined, user?: DbUser): boolean {
   if (user?.role === "admin") return true;
+  if (isSuperAdminToken(token)) return true;
   if (!token) return false;
   return token.admin === true || token.role === "admin";
 }
@@ -462,5 +473,34 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     return;
   }
 
+  next();
+}
+/**
+ * Super Admin only (creating and deleting CMS admins). Always verifies a real Firebase ID token,
+ * checks it has not been revoked, and compares its verified email with SUPER_ADMIN_EMAIL.
+ * Nothing sent by the client (role, email field, claims in the body) is trusted.
+ */
+export async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!readBearerToken(req)) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  const decoded = await verifyToken(req, true);
+  if (!decoded) {
+    res.status(401).json({ error: "Invalid or expired authentication token" });
+    return;
+  }
+  req.auth = decoded;
+  req.firebaseUid = decoded.uid;
+
+  if (!isSuperAdminToken(decoded)) {
+    logger.warn({ uid: decoded.uid, path: req.originalUrl, method: req.method }, "Non-super-admin attempted admin management");
+    res.status(403).json({
+      error: isSuperAdminEmail(decoded.email)
+        ? "Verify your email address to manage admins"
+        : "Only the Super Admin can manage admins",
+    });
+    return;
+  }
   next();
 }

@@ -18,7 +18,7 @@ import profileRouter from "./profile.js"
 import bunnyRouter from "./bunny.routes.js";
 import cmsTestsRouter from "./cmsTests.js";
 import testsRouter from "./tests.js";
-
+import cmsAdminsRouter from "./cmsAdmins.js";
 const router = Router();
 
 router.use("/health", healthRouter);
@@ -37,6 +37,8 @@ router.use("/stats", statsRouter);
 router.use("/enrollments", enrollmentsRouter);
 router.use("/cms/tests", cmsTestsRouter);
 router.use("/tests", testsRouter);
+// Super Admin only: create and remove CMS admins
+router.use("/cms/admins", cmsAdminsRouter);
 // Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
 router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);

@@ -7,6 +7,7 @@ import { CreateTestBody, QUESTION_CSV_MAX_BYTES, QUESTION_TYPES, SUBMISSION_REAS
 import { requireAdminOrFaculty } from "../middlewares/auth";
 import { HttpError, parseId } from "../lib/http-error";
 import { logger } from "../lib/logger";
+import { firebaseAuth } from "../lib/firebase-admin";
 import { buildQuestion } from "../lib/testEvaluation";
 import { parseQuestionCsv, questionTemplateCsv, type ParsedUpload } from "../lib/testCsv";
 import { notifyTestScheduled } from "../lib/testNotifications";
@@ -321,6 +322,8 @@ const resultColumns = {
   userId: testSubmissionsTable.userId,
   studentName: usersTable.name,
   studentEmail: usersTable.email,
+  studentPhone: usersTable.phone,
+  studentFirebaseUid: usersTable.firebaseUid,
   status: testSubmissionsTable.status,
   score: testSubmissionsTable.score,
   correctCount: testSubmissionsTable.correctCount,
@@ -334,7 +337,31 @@ const resultColumns = {
   violationCount: testSubmissionsTable.violationCount,
   reportedViolationCount: testSubmissionsTable.reportedViolationCount,
 };
+// Phone from the student's profile, else the number they signed up with (stored in Firebase).
+// Best effort: results still load if Firebase cannot be reached.
+const firebasePhones = async (uids: string[]): Promise<Map<string, string>> => {
+  const phones = new Map<string, string>();
+  const unique = [...new Set(uids)];
+  try {
+    for (let i = 0; i < unique.length; i += 100) {
+      const { users } = await firebaseAuth.getUsers(unique.slice(i, i + 100).map((uid) => ({ uid })));
+      for (const user of users) if (user.phoneNumber) phones.set(user.uid, user.phoneNumber);
+    }
+  } catch (err) {
+    logger.warn({ err }, "Could not load student phone numbers from Firebase");
+  }
+  return phones;
+};
 
+const fillPhones = async <T extends { studentPhone: string | null; studentFirebaseUid: string }>(rows: T[]): Promise<T[]> => {
+  const missing = rows.filter((row) => !row.studentPhone).map((row) => row.studentFirebaseUid);
+  if (!missing.length) return rows;
+  const phones = await firebasePhones(missing);
+  return rows.map((row) => ({ ...row, studentPhone: row.studentPhone || phones.get(row.studentFirebaseUid) || null }));
+};
+
+// The Firebase uid is only needed for the lookup above; it is not sent to the CMS
+const withoutUid = <T extends { studentFirebaseUid: string }>(rows: T[]) => rows.map(({ studentFirebaseUid: _uid, ...row }) => row);
 const average = (values: number[]) => (values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) / 100 : 0);
 
 // Leaderboard: highest score first; equal scores share a rank (1, 1, 3) and the earlier submission is listed first
@@ -380,8 +407,10 @@ router.get("/:id/results", async (req, res) => {
   const reason = typeof req.query.reason === "string" && (SUBMISSION_REASONS as readonly string[]).includes(req.query.reason) ? req.query.reason : "";
   const minScore = req.query.minScore !== undefined && req.query.minScore !== "" ? Number(req.query.minScore) : null;
   const maxScore = req.query.maxScore !== undefined && req.query.maxScore !== "" ? Number(req.query.maxScore) : null;
-  let rows = ranked.filter((row) =>
-    (!search || [row.studentName, row.studentEmail, String(row.userId)].some((value) => value?.toLowerCase().includes(search))) &&
+  // A phone search must also see numbers that are only stored in Firebase
+  const searchable = search ? await fillPhones(ranked) : ranked;
+  let rows = searchable.filter((row) =>
+    (!search || [row.studentName, row.studentEmail, row.studentPhone, String(row.userId)].some((value) => value?.toLowerCase().includes(search))) &&
     (!reason || row.submissionReason === reason) &&
     (minScore === null || Number.isNaN(minScore) || row.score >= minScore) &&
     (maxScore === null || Number.isNaN(maxScore) || row.score <= maxScore));
@@ -396,8 +425,8 @@ router.get("/:id/results", async (req, res) => {
     data: {
       test,
       stats,
-      results: rows.slice((page - 1) * limit, page * limit),
-      inProgress,
+      results: withoutUid(await fillPhones(rows.slice((page - 1) * limit, page * limit))),
+      inProgress: withoutUid(await fillPhones(inProgress)),
     },
     pagination: { page, limit, total: rows.length },
   });
@@ -416,7 +445,9 @@ router.get("/:id/results/:submissionId", async (req, res) => {
   const test = await findTest(id);
   await closeExpiredAttempts({ testId: id });
   const attempt = await findAttempt(id, parseId(req.params.submissionId));
-  const [student] = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, attempt.userId));
+   const [studentRow] = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email, phone: usersTable.phone, firebaseUid: usersTable.firebaseUid }).from(usersTable).where(eq(usersTable.id, attempt.userId));
+  const { firebaseUid: studentUid, ...studentInfo } = studentRow;
+  const student = { ...studentInfo, phone: studentInfo.phone || (await firebasePhones([studentUid])).get(studentUid) || null };
 
   let rank: number | null = null;
   if (attempt.status === "SUBMITTED") {
