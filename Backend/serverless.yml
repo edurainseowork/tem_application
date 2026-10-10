@@ -18,6 +18,16 @@ provider:
       - sg-0c07d868d37903d36
     subnetIds:
       - subnet-075e2e2d787f424a9
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource: "arn:aws:s3:::edurain-media-v2/*"
+
 
 package:
   patterns:
