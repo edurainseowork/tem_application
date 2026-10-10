@@ -251,3 +251,108 @@ This section documents the latest development sprint covering video streaming in
 - **What was done:** Implemented a hardware back-button listener to prevent accidental app exits.
 - **UX Enhancement:** If a student presses the back button on the root home screen, a toast/warning says "Press back again to exit". The app only exits if the back button is pressed twice consecutively within a short time threshold. This conforms to standard Android premium app behaviors and reduces accidental drops in user engagement.
 
+
+
+# Edurain Platform - Post-Mortem & Local Setup Guide
+
+## 1. Post-Mortem: Recent Issues & Fixes (Oct 2026)
+
+During the recent deployment and S3 migration, we encountered a sequence of interconnected issues. Below is a detailed breakdown of the mistakes made and how they were resolved.
+
+### Issue 1: AWS Credentials Leak & Quarantine
+- **What happened:** A migration script (`Backend/migrate-s3.mjs`) containing hardcoded AWS Access Keys was accidentally pushed to GitHub.
+- **The Impact:** AWS immediately flagged the keys via their `AWSCompromisedKeyQuarantineV3` policy and blocked all access (AccessDenied errors) to our S3 buckets, including `edurain-media-assets`.
+- **The Fix:** We generated a brand new set of IAM credentials, created a new secure bucket (`edurain-media-v2`), and securely migrated all legacy data to this new bucket. The new credentials were added strictly to local `.env` files.
+
+### Issue 2: Vercel CMS Portal "Blank Screen" (React Version Mismatch)
+- **What happened:** While fixing local CLI errors, a root `pnpm-lock.yaml` update caused Vercel to install duplicate instances of React (due to a version mismatch between `Frontend` using `19.2.3` and `CMS-Portal` using `^19.2.8`).
+- **The Impact:** React hooks (`useState`) crashed at runtime, resulting in a blank white screen of death on the live CMS Portal.
+- **The Fix:** We pinned the React versions in `CMS-Portal/package.json` to exactly `"19.2.3"` to match the frontend, regenerated the `pnpm-lock.yaml`, and pushed the lockfile. This resolved the duplicate React issue on Vercel.
+
+### Issue 3: S3/Bunny Upload 403 Errors in CMS
+- **What happened:** Although we added the new `edurain-media-v2` bucket to the IAM role in `serverless.yml`, we forgot to expose the new `AWS_S3_BUCKET_NAME` and `BUNNY_STREAM_*` environment variables to the Lambda function.
+- **The Impact:** The AWS Lambda environment fell back to the old default `edurain-media-assets` bucket name, generating invalid pre-signed URLs. When the CMS tried to upload, AWS rejected it with a `403 Forbidden` because the Lambda role no longer had permissions for the old bucket. The same happened for Bunny Stream video uploads.
+- **The Fix:** We explicitly mapped `AWS_S3_BUCKET_NAME`, `BUNNY_STREAM_API_KEY`, `BUNNY_STREAM_LIBRARY_ID`, and `BUNNY_STREAM_CDN_HOSTNAME` in the `provider.environment` section of `Backend/serverless.yml` and redeployed the backend (`serverless deploy`).
+
+---
+
+## 2. Local Setup Guide for Developers
+
+If you are a team member setting up the project locally for the first time, or syncing up after these recent changes, follow these exact steps:
+
+### Prerequisites
+1. **Node.js**: Ensure you are running Node.js v20 or v22 (v24 may have compatibility issues with some older AWS SDKs).
+2. **Package Manager**: Install `pnpm` globally if you haven't already: 
+   ```bash
+   npm install -g pnpm@latest
+   ```
+3. **Database**: You need access to the AWS RDS PostgreSQL database (or a local Postgres instance if you prefer to run it locally).
+
+### Step 1: Pull the Latest Code
+```bash
+git fetch --all
+git pull origin main
+```
+
+### Step 2: Install Dependencies
+This project uses a pnpm monorepo workspace. Run install from the **root** directory:
+```bash
+pnpm install
+```
+*(Do not use `npm install` or `yarn install`, it will break the lockfile and workspace linking).*
+
+### Step 3: Setup Environment Variables
+You will need `.env` files in three places. Request the latest credentials from the lead developer.
+
+**1. Root `.env` (Frontend App):**
+Create a `.env` in the root folder with the Expo Firebase keys and the API URL.
+```env
+EXPO_PUBLIC_API_URL="http://localhost:5000"  # Or the AWS live URL for testing production
+```
+
+**2. Backend `.env` (`Backend/.env`):**
+Create a `.env` inside the `Backend/` folder. It MUST contain the Database URL, AWS Keys, and Bunny Stream keys:
+```env
+DATABASE_URL="postgresql://postgres:<PASSWORD>@database-2.cluster-cpm4oeo2cf6s.ap-south-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify"
+AWS_REGION="ap-south-1"
+AWS_S3_BUCKET_NAME="edurain-media-v2"
+AWS_ACCESS_KEY_ID="<NEW_ACCESS_KEY>"
+AWS_SECRET_ACCESS_KEY="<NEW_SECRET_KEY>"
+BUNNY_STREAM_LIBRARY_ID="775402"
+BUNNY_STREAM_API_KEY="<BUNNY_API_KEY>"
+BUNNY_STREAM_CDN_HOSTNAME="vz-0167fe79-908.b-cdn.net"
+```
+
+**3. CMS Portal `.env` (`CMS-Portal/.env`):**
+Create a `.env` inside the `CMS-Portal/` folder:
+```env
+VITE_API_URL="http://localhost:5000"
+```
+
+### Step 4: Running the Applications
+
+**Run the Backend (API):**
+```bash
+cd Backend
+pnpm run dev
+```
+
+**Run the CMS Portal:**
+Open a new terminal.
+```bash
+cd CMS-Portal
+pnpm run dev
+```
+
+**Run the Mobile App (Frontend):**
+Open a new terminal.
+```bash
+cd Frontend
+npx expo start -c
+```
+*(Press `a` for Android, `i` for iOS, or `w` for Web).*
+
+### Important Rules
+- **NEVER** commit `.env` files or scripts containing hardcoded credentials. 
+- If you change a dependency in `package.json`, always run `pnpm install` in the root and **commit the `pnpm-lock.yaml` file**. Failure to do so will crash the Vercel deployment.
+
