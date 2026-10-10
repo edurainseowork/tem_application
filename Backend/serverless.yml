@@ -13,6 +13,11 @@ provider:
     CORS_ORIGINS: ${env:CORS_ORIGINS, ''}
     PUBLIC_BASE_URL: ${env:PUBLIC_BASE_URL, ''}
     FIREBASE_SERVICE_ACCOUNT: ${env:FIREBASE_SERVICE_ACCOUNT, ''}
+  vpc:
+    securityGroupIds:
+      - sg-0c07d868d37903d36
+    subnetIds:
+      - subnet-075e2e2d787f424a9
 
 package:
   patterns:

@@ -152,7 +152,21 @@
               "lambdaRole"
             ]
           ]
-        }
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+              ]
+            ]
+          }
+        ]
       }
     },
     "ApiLambdaFunction": {
@@ -162,7 +176,7 @@
           "S3Bucket": {
             "Ref": "ServerlessDeploymentBucket"
           },
-          "S3Key": "serverless/edurain-api/dev/1791635288840-2026-10-10T12:28:08.840Z/edurain-api.zip"
+          "S3Key": "serverless/edurain-api/dev/1791638373319-2026-10-10T13:19:33.319Z/edurain-api.zip"
         },
         "Handler": "dist/lambda.handler",
         "Runtime": "nodejs20.x",
@@ -171,7 +185,7 @@
         "Timeout": 6,
         "Environment": {
           "Variables": {
-            "DATABASE_URL": "postgresql://postgres:Aryan1400@database-2.cluster-cpm4oeo2cf6s.ap-south-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify",
+            "DATABASE_URL": "postgresql://postgres:Aryan1400@edurain-proxy.proxy-cpm4oeo2cf6s.ap-south-1.rds.amazonaws.com:5432/postgres?sslmode=require",
             "RAZORPAY_KEY_ID": "rzp_test_Tlv2A7wIHUCIch",
             "RAZORPAY_KEY_SECRET": "vTSG0wRAwW1Gwuz1HahV64F2",
             "NODE_ENV": "production",
@@ -185,20 +199,28 @@
             "IamRoleLambdaExecution",
             "Arn"
           ]
+        },
+        "VpcConfig": {
+          "SecurityGroupIds": [
+            "sg-0c07d868d37903d36"
+          ],
+          "SubnetIds": [
+            "subnet-075e2e2d787f424a9"
+          ]
         }
       },
       "DependsOn": [
         "ApiLogGroup"
       ]
     },
-    "ApiLambdaVersioniIWbrrw4BIenaPAzb2hLVyv1YIXcK2vRuHMFJYtlHlg": {
+    "ApiLambdaVersionvL0DbhxGI2lQmIeaz67TmmI9XtcmTQmlYEgnPjvyVjQ": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "ApiLambdaFunction"
         },
-        "CodeSha256": "f78o2ZlEanxWp52eVQRB+HAEfrxhA4ekOnzLLfGjZgc="
+        "CodeSha256": "7nRFckyrSHn98/C7pMc6wwGc7EMu5Xy+IbOsTjiRBuM="
       }
     },
     "HttpApi": {
@@ -309,7 +331,7 @@
     "ApiLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "ApiLambdaVersioniIWbrrw4BIenaPAzb2hLVyv1YIXcK2vRuHMFJYtlHlg"
+        "Ref": "ApiLambdaVersionvL0DbhxGI2lQmIeaz67TmmI9XtcmTQmlYEgnPjvyVjQ"
       },
       "Export": {
         "Name": "sls-edurain-api-dev-ApiLambdaFunctionQualifiedArn"
