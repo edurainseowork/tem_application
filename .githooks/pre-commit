@@ -1,0 +1,8 @@
+#!/bin/sh
+# Blocks commits containing secret files (even with `git add -f`). Enabled via `pnpm install` (prepare script).
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(\.env(\..+)?|firebase-service-account\.json|[^/]+\.(pem|key))$|(^|/)\.serverless/' | grep -v '\.env\.example$')
+if [ -n "$bad" ]; then
+  echo "Commit blocked - secret files staged:"; echo "$bad"
+  echo "Unstage with: git restore --staged <file>"
+  exit 1
+fi
