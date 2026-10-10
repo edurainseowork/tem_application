@@ -10,7 +10,14 @@ router.get("/", requireAdmin, async (req, res) => {
   try {
     const userCountResult = await db.select({ count: count() }).from(usersTable);
     const activeStudents = userCountResult[0].count;
-    res.json({ success: true, activeStudents });
+    
+    // Fetch all users
+    const users = await db
+      .select()
+      .from(usersTable)
+      .orderBy(usersTable.createdAt);
+
+    res.json({ success: true, activeStudents, users: users.reverse() });
   } catch (error) {
     console.error("Stats error", error);
     res.status(500).json({ error: "Failed to fetch stats" });

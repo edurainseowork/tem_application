@@ -19,7 +19,9 @@ type GoLiveProps = {
   showToast: (message: string, type?: 'success' | 'error') => void
 }
 
-const API_URL = 'http://localhost:5000/api'
+import { API_BASE_URL } from '../api'
+
+const API_URL = `${API_BASE_URL}/api`
 
 const inputStyle = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', colorScheme: 'dark' } as const
 const labelStyle = { display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' } as const

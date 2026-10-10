@@ -157,5 +157,9 @@ overrides:
 
 allowBuilds:
   '@firebase/util': true
+  aws-sdk: set this to true or false
+  dtrace-provider: set this to true or false
+  es5-ext: set this to true or false
   esbuild: true
   protobufjs: true
+  serverless: set this to true or false
