@@ -24,6 +24,7 @@ package:
     - '!**'
     - 'dist/**'
     - '.env'
+    - 'firebase-service-account.json'
 
 functions:
   api:

@@ -36,6 +36,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1148.0",
     "@aws-sdk/client-ec2": "^3.1148.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

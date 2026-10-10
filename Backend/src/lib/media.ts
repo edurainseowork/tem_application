@@ -3,7 +3,10 @@ import fs from "fs/promises";
 import path from "path";
 import { logger } from "./logger";
 
-export const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+// Lambda's /var/task is read-only; only /tmp is writable (and ephemeral — use S3 for durable files).
+export const UPLOAD_DIR = process.env.AWS_LAMBDA_FUNCTION_NAME
+  ? "/tmp/uploads"
+  : path.join(process.cwd(), "uploads");
 
 // Files written by routes/upload.ts are always "<uuid>.<ext>".
 const LOCAL_UPLOAD_RE = /^\/uploads\/[A-Za-z0-9-]+\.(png|jpe?g|webp|pdf)$/;
