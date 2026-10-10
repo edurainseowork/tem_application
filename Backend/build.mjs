@@ -60,13 +60,13 @@ async function buildAll() {
       "@mikro-orm/*",
       "@grpc/*",
       "@swc/*",
-      "@aws-sdk/*",
+      // @aws-sdk/* intentionally bundled (same reason as firebase-admin below)
       "@azure/*",
       "@opentelemetry/*",
       "@google-cloud/*",
       "@google/*",
       "googleapis",
-      "firebase-admin",
+      // firebase-admin is intentionally bundled: Lambda package only ships dist/** (no node_modules)
       "@parcel/watcher",
       "@sentry/profiling-node",
       "@tree-sitter/*",
