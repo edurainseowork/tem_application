@@ -49,7 +49,7 @@ export const COURSES: Course[] = [
     students: '2.4k students',
     price: 2499,
     originalPrice: 3999,
-    image: require('@/assets/images/course-physics.jpg'),
+    image: require('@/assets/images/icon.png'),
     tone: 'coral',
   },
   {
@@ -66,7 +66,7 @@ export const COURSES: Course[] = [
     students: '3.1k students',
     price: 1999,
     originalPrice: 3499,
-    image: require('@/assets/images/course-biology.jpg'),
+    image: require('@/assets/images/icon.png'),
     tone: 'teal',
   },
   {
@@ -83,7 +83,7 @@ export const COURSES: Course[] = [
     students: '1.8k students',
     price: 1499,
     originalPrice: 2499,
-    image: require('@/assets/images/course-foundation.jpg'),
+    image: require('@/assets/images/icon.png'),
     tone: 'gold',
   },
   {
@@ -100,7 +100,7 @@ export const COURSES: Course[] = [
     students: '1.2k students',
     price: 1799,
     originalPrice: 2999,
-    image: require('@/assets/images/course-biology.jpg'),
+    image: require('@/assets/images/icon.png'),
     tone: 'lavender',
   },
 ];
