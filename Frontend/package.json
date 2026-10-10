@@ -44,8 +44,8 @@
     "expo-symbols": "~57.0.1",
     "expo-system-ui": "~57.0.1",
     "expo-web-browser": "~57.0.1",
-    "react": "catalog:",
-    "react-dom": "catalog:",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-keyboard-controller": "1.21.9",
@@ -73,8 +73,8 @@
     "expo-screen-capture": "^57.0.3",
     "expo-screen-orientation": "^57.0.2",
     "firebase": "^12.19.0",
-    "react": "catalog:",
+    "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-webview": "13.16.1"
+    "react-native-webview": "^14.0.1"
   }
 }
