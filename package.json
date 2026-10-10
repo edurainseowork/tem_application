@@ -4,7 +4,7 @@
   "license": "MIT",
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks",
+    "prepare": "git config core.hooksPath .githooks || true",
     "start": "pnpm --filter @workspace/frontend exec expo start",
     "web": "pnpm --filter @workspace/frontend exec expo start --web",
     "android": "pnpm --filter @workspace/frontend exec expo run:android",
