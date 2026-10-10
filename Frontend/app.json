@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "EDURAIN",
-    "slug": "edurain",
+    "slug": "edurainindia",
+    "owner": "edurainindia",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/edurain-logo.jpg",
@@ -9,13 +10,13 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.edurain.app",
+      "bundleIdentifier": "com.edurainindia.app",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow EDURAIN to access your files and documents for course content uploads."
       }
     },
     "android": {
-      "package": "com.edurain.app",
+      "package": "com.edurainindia.app",
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
@@ -45,6 +46,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "de7a99e0-3c7e-4173-a866-6a316d37a0f2"
+      }
     }
   }
 }

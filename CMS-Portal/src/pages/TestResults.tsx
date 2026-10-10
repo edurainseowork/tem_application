@@ -237,6 +237,7 @@ function TestResults({ test, showToast }: { test: TestItem; showToast: (message:
 
 function ReasonBadge({ reason }: { reason: string | null }) {
   const cheating = reason?.startsWith('CHEATING')
+  const label = reason ? (SUBMISSION_REASON_LABELS[reason] ?? reason) : '—'
   return (
     <span
       style={{
@@ -251,7 +252,7 @@ function ReasonBadge({ reason }: { reason: string | null }) {
         gap: '4px',
       }}
     >
-      {cheating ? `🚨 ${SUBMISSION_REASON_LABELS[reason] ?? reason}` : (reason ? SUBMISSION_REASON_LABELS[reason] ?? reason : '—')}
+      {cheating ? `🚨 ${label}` : label}
     </span>
   )
 }

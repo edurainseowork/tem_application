@@ -37,7 +37,7 @@ export function corsOptions(): CorsOptions {
   return {
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      if (allowList.includes(origin)) return callback(null, true);
+      if (allowList.includes("*") || allowList.includes(origin)) return callback(null, true);
       if (!isProduction && allowList.length === 0) return callback(null, true);
       return callback(null, false);
     },

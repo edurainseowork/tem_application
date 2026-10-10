@@ -1,4 +1,5 @@
 service: edurain-api
+useDotenv: true
 
 provider:
   name: aws
@@ -12,6 +13,12 @@ provider:
     CORS_ORIGINS: ${env:CORS_ORIGINS, ''}
     PUBLIC_BASE_URL: ${env:PUBLIC_BASE_URL, ''}
     FIREBASE_SERVICE_ACCOUNT: ${env:FIREBASE_SERVICE_ACCOUNT, ''}
+
+package:
+  patterns:
+    - '!**'
+    - 'dist/**'
+    - '.env'
 
 functions:
   api:
