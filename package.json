@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "start": "pnpm --filter @workspace/frontend exec expo start",
     "web": "pnpm --filter @workspace/frontend exec expo start --web",
     "android": "pnpm --filter @workspace/frontend exec expo run:android",
