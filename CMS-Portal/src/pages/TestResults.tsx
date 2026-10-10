@@ -12,6 +12,7 @@ type ResultRow = {
   userId: number
   studentName: string | null
   studentEmail: string
+  studentPhone: string | null
   rank: number
   score: number
   correctCount: number
@@ -62,7 +63,7 @@ type ReviewItem = {
 
 type ResultDetail = {
   test: TestItem
-  student: { id: number; name: string | null; email: string }
+  student: { id: number; name: string | null; email: string; phone: string | null }
   rank: number | null
   submission: ResultRow & { status: string; violations: { type: string; at: string }[] }
   review: ReviewItem[]
@@ -151,7 +152,7 @@ function TestResults({ test, showToast }: { test: TestItem; showToast: (message:
             <p style={{ ...mutedText, marginTop: '4px' }}>Course: {test.courseTitle} · Test: {test.title}{test.targetBatch ? ` · Batch: ${test.targetBatch}` : ''}</p>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Search student / email / ID" style={{ ...inputStyle, width: '200px' }} />
+            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Search student / email /phone / ID" style={{ ...inputStyle, width: '200px' }} />
             <select value={reason} onChange={(e) => { setReason(e.target.value); setPage(1) }} style={{ ...inputStyle, width: '190px' }}>
               <option value="">All submission reasons</option>
               {Object.entries(SUBMISSION_REASON_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -179,7 +180,11 @@ function TestResults({ test, showToast }: { test: TestItem; showToast: (message:
                 {results.map((row) => (
                   <tr key={row.id} title="View result" style={{ cursor: 'pointer' }} onClick={() => setOpenId(row.id)}>
                     <td style={{ ...tdStyle, fontWeight: 700 }}>{row.rank}</td>
-                    <td style={tdStyle}>{studentLabel(row)}<div style={{ ...mutedText, fontSize: '0.75rem' }}>{row.studentEmail}</div></td>
+                    <td style={tdStyle}>
+                  {studentLabel(row)}
+                  <div style={{ ...mutedText, fontSize: '0.75rem' }}>{row.studentEmail}</div>
+                  {row.studentPhone && <div style={{ ...mutedText, fontSize: '0.75rem' }}>{row.studentPhone}</div>}
+                </td>
                     <td style={tdStyle}>{row.userId}</td>
                     <td style={{ ...tdStyle, fontSize: '0.78rem', minWidth: '150px' }}>{test.courseTitle}<div style={{ ...mutedText, fontSize: '0.75rem' }}>{test.title}</div></td>
                     <td style={{ ...tdStyle, fontWeight: 700 }}>{row.score}</td>
@@ -217,7 +222,7 @@ function TestResults({ test, showToast }: { test: TestItem; showToast: (message:
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {inProgress.map((row) => (
               <div key={row.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)' }}>
-                <span>{studentLabel(row)} <span style={mutedText}>· started {formatDateTime(row.startedAt)} · ends {formatDateTime(row.endsAt)} · violations {row.violationCount}</span></span>
+                <span>{studentLabel(row)} <span style={mutedText}>{row.studentPhone ? `· ${row.studentPhone} ` : ''}· started {formatDateTime(row.startedAt)} · ends {formatDateTime(row.endsAt)} · violations {row.violationCount}</span></span>
                 <button className="btn" style={ghostButton} onClick={() => forceSubmit(row)}>Submit Now</button>
               </div>
             ))}
@@ -268,6 +273,7 @@ function ResultDetailModal({ testId, submissionId, onClose }: { testId: number; 
     ['Student Name', detail.student.name || '—'],
     ['Student ID', String(detail.student.id)],
     ['Email', detail.student.email],
+    ['Phone', detail.student.phone || '—'],
     ['Course', detail.test.courseTitle],
     ['Test', detail.test.title],
     ['Batch', detail.test.targetBatch || '—'],
