@@ -14,6 +14,7 @@
         "buildType": "apk"
       },
       "env": {
+        "ORG_GRADLE_PROJECT_org.gradle.jvmargs": "-Xmx2048m -XX:MaxMetaspaceSize=512m",
         "EXPO_PUBLIC_API_URL": "https://sjlfsfe8jf.execute-api.ap-south-1.amazonaws.com",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBLw5eneJGCi4-YshAf5wgBA-yDT8o70Mc",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "edurain-pvt.firebaseapp.com",
