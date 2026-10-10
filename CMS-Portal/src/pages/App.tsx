@@ -20,13 +20,14 @@ function App() {
   // every admin-management API checks it again on its own.
   const [me, setMe] = useState<MeInfo>({ isSuperAdmin: false, superAdminEmailUnverified: false });
   const [openCreateAdmin, setOpenCreateAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState('courses');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [activeStudents, setActiveStudents] = useState(0);
+  const [contentStats, setContentStats] = useState<Record<string, number>>({});
   const [usersList, setUsersList] = useState<any[]>([]);
 
   const [coursesList, setCoursesList] = useState<AdminCourse[]>([]);
@@ -81,6 +82,7 @@ function App() {
       const data = await apiFetch('/stats');
       if (data.success) {
         setActiveStudents(data.activeStudents);
+        setContentStats(data.content || {});
         setUsersList(data.users || []);
       }
     } catch (e) {
@@ -369,6 +371,12 @@ function App() {
                 <span className="stat-label">Active Students</span>
                 <span className="stat-value">{activeStudents}</span>
               </div>
+              {Object.entries(contentStats).map(([k, v]) => (
+                <div key={k} className="glass-card stat-card">
+                  <span className="stat-label" style={{ textTransform: 'capitalize' }}>{k.replace(/([A-Z])/g, ' $1')}</span>
+                  <span className="stat-value">{v}</span>
+                </div>
+              ))}
             </div>
             <div className="glass-card" style={{ minHeight: '300px', overflowX: 'auto' }}>
               <h3 style={{ marginBottom: 'var(--space-md)' }}>Registered Students</h3>
