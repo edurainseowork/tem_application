@@ -25,7 +25,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/edurain-logo.jpg"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",

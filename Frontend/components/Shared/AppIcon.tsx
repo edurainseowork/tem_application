@@ -1,7 +1,7 @@
 import { Image, StyleSheet, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 
-const EDURAIN_LOGO = require('@/assets/images/edurain-logo.jpg');
+const EDURAIN_LOGO = require('@/assets/images/icon.png');
 
 export function AppIcon({ small = false }: { small?: boolean }) {
   const colors = useColors();
