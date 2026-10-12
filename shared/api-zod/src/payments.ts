@@ -15,9 +15,18 @@ export const VerifyPaymentBody = zod.object({
   razorpay_order_id: razorpayId("order", "order ID"),
   razorpay_payment_id: razorpayId("pay", "payment ID"),
   razorpay_signature: zod.string({ required_error: "Signature is required" }).trim().regex(/^[a-f0-9]{64}$/, "Invalid signature"),
+  googleAlternativeBillingToken: zod.string().trim().optional(),
 });
 
 export type VerifyPaymentBody = zod.infer<typeof VerifyPaymentBody>;
+
+export const VerifyGooglePlayPaymentBody = zod.object({
+  courseId: zod.coerce.number({ required_error: "Course is required" }).int().positive("Invalid course"),
+  productId: zod.string({ required_error: "Product ID is required" }).trim().min(1, "Product ID is required"),
+  purchaseToken: zod.string({ required_error: "Purchase token is required" }).trim().min(1, "Purchase token is required"),
+});
+
+export type VerifyGooglePlayPaymentBody = zod.infer<typeof VerifyGooglePlayPaymentBody>;
 
 export const PaymentFailedBody = zod.object({
   razorpay_order_id: razorpayId("order", "order ID"),
@@ -25,3 +34,4 @@ export const PaymentFailedBody = zod.object({
 });
 
 export type PaymentFailedBody = zod.infer<typeof PaymentFailedBody>;
+

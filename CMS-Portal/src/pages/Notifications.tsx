@@ -86,6 +86,17 @@ function Notifications({ showToast }: NotificationsProps) {
     }
   }
 
+  const handleDelete = async (id: number, notificationTitle: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${notificationTitle}"? It will be removed from all students' in-app notification history.`)) return
+    try {
+      await apiFetch(`/admin/notifications/${id}`, { method: 'DELETE' })
+      showToast('Notification deleted successfully', 'success')
+      setHistory((prev) => prev.filter((item) => item.id !== id))
+    } catch (e: any) {
+      showToast('Failed to delete notification: ' + e.message, 'error')
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
       <div className="glass-card">
@@ -125,17 +136,36 @@ function Notifications({ showToast }: NotificationsProps) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
             {history.map((item) => (
-              <div key={item.id} style={{ display: 'flex', gap: '12px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                {item.imageUrl && <img src={item.imageUrl} alt="" style={{ width: '96px', height: '54px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }} />}
-                <div style={{ minWidth: 0 }}>
-                  <h4 style={{ color: 'white', marginBottom: '4px' }}>{item.title}</h4>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{item.body}</p>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    {new Date(item.createdAt).toLocaleString()} · {item.recipientCount} users · {item.pushSentCount} pushed
-                    {item.pushFailedCount > 0 ? ` · ${item.pushFailedCount} failed` : ''}
-                    {item.sentBy ? ` · by ${item.sentBy}` : ''}
-                  </span>
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', padding: '14px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: 0 }}>
+                  {item.imageUrl && <img src={item.imageUrl} alt="" style={{ width: '96px', height: '54px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }} />}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <h4 style={{ color: 'white', marginBottom: '4px' }}>{item.title}</h4>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{item.body}</p>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {new Date(item.createdAt).toLocaleString()} · {item.recipientCount} users · {item.pushSentCount} pushed
+                      {item.pushFailedCount > 0 ? ` · ${item.pushFailedCount} failed` : ''}
+                      {item.sentBy ? ` · by ${item.sentBy}` : ''}
+                    </span>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.id, item.title)}
+                  className="btn"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: '#f87171',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  Delete
+                </button>
               </div>
             ))}
           </div>

@@ -8,6 +8,7 @@ import { eq, and } from "drizzle-orm";
 import { calculateDiscount, checkCoupon, redeemCoupon } from "./coupons.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { logger } from "../lib/logger";
+import { reportAlternativeBillingToGoogle } from "./google-play.js";
 
 const router = Router();
 
@@ -163,7 +164,7 @@ router.post("/verify", requireAuth, async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid payment details" });
     return;
   }
-  const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = parsed.data;
+  const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature, googleAlternativeBillingToken } = parsed.data;
   const { keySecret } = getRazorpayCredentials();
   if (!keySecret) {
     res.status(500).json({ error: "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_SECRET in .env." });
@@ -187,7 +188,13 @@ router.post("/verify", requireAuth, async (req, res) => {
     if (payment.status !== "paid") {
       await db.transaction(async (tx) => {
         await tx.update(paymentsTable)
-          .set({ status: "paid", razorpayPaymentId: paymentId, failureReason: null, updatedAt: new Date() })
+          .set({
+            status: "paid",
+            razorpayPaymentId: paymentId,
+            googleAlternativeBillingToken: googleAlternativeBillingToken || null,
+            failureReason: null,
+            updatedAt: new Date()
+          })
           .where(eq(paymentsTable.id, payment.id));
         await enroll(tx, payment.userId, payment.courseId, { orderId, paymentId });
         // Count the coupon use once per order. The limit was checked when the order was created,
@@ -197,6 +204,16 @@ router.post("/verify", requireAuth, async (req, res) => {
         }
       });
       logger.info({ orderId, paymentId, userId: payment.userId, courseId: payment.courseId }, "Razorpay payment verified");
+
+      // Report to Google Play for User Choice Billing compliance if token was provided
+      if (googleAlternativeBillingToken) {
+        reportAlternativeBillingToGoogle({
+          externalTransactionId: `rzp_${paymentId}`,
+          originalAlternativeBillingToken: googleAlternativeBillingToken,
+          amountInPaise: payment.amount,
+          currency: payment.currency,
+        }).catch((err) => logger.error({ err }, "Background reporting to Google Play failed"));
+      }
     }
 
     res.json({ success: true, message: "Payment verified successfully", courseId: payment.courseId });

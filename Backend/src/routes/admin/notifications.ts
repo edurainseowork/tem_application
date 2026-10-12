@@ -79,4 +79,25 @@ router.post("/", rateLimit({ windowMs: 60_000, max: 10 }), parseMultipart, async
   res.status(201).json({ success: true, data: updated, devices: tokens.length });
 });
 
+// Delete an admin notification (CMS): removes it so it disappears from students' in-app notifications
+router.delete("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) {
+    throw new HttpError(400, "Invalid notification ID");
+  }
+
+  const [deleted] = await db
+    .delete(adminNotificationsTable)
+    .where(eq(adminNotificationsTable.id, id))
+    .returning();
+
+  if (!deleted) {
+    throw new HttpError(404, "Notification not found");
+  }
+
+  logger.info({ adminNotificationId: id, adminEmail: req.auth?.email }, "Admin notification deleted");
+  res.json({ success: true, message: "Notification deleted successfully" });
+});
+
 export default router;
+

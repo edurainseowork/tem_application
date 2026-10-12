@@ -39,11 +39,29 @@ const authPost = async (path: string, body: unknown) => {
 export const createPaymentOrder = (courseId: number, couponCode?: string): Promise<CreateOrderResult> =>
   authPost('/razorpay/order', { courseId, couponCode });
 
-export const verifyPayment = (result: RazorpaySuccess): Promise<{ success: true; courseId: number }> =>
-  authPost('/razorpay/verify', result);
+export const verifyPayment = (
+  result: RazorpaySuccess,
+  googleAlternativeBillingToken?: string
+): Promise<{ success: true; courseId: number }> =>
+  authPost('/razorpay/verify', {
+    ...result,
+    googleAlternativeBillingToken: googleAlternativeBillingToken || undefined,
+  });
+
+export interface GooglePlayPurchaseInput {
+  courseId: number;
+  productId: string;
+  purchaseToken: string;
+}
+
+export const verifyGooglePlayPayment = (
+  input: GooglePlayPurchaseInput
+): Promise<{ success: true; courseId: number; message?: string }> =>
+  authPost('/google-play/verify', input);
 
 export const reportPaymentFailed = (orderId: string, reason?: string) =>
   authPost('/razorpay/failed', { razorpay_order_id: orderId, reason }).catch(() => undefined);
+
 
 export const fetchPurchasedCourseIds = async (): Promise<number[]> => {
   await auth.authStateReady();

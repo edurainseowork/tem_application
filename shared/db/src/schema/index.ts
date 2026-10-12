@@ -46,6 +46,7 @@ export const coursesTable = pgTable("courses", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   price: integer("price").notNull(), // in paise/cents
+  playProductId: text("play_product_id"), // Google Play In-App Product ID (e.g. course_101)
   originalPrice: integer("original_price"), // MRP in paise, shown struck-through; null = no discount shown
   thumbnail: text("thumbnail").notNull(), // "/uploads/<file>" or absolute https URL (S3/CDN)
   category: text("category").notNull(), // Denormalised category name, kept in sync with categoryId
@@ -132,6 +133,9 @@ export const userCoursesTable = pgTable("user_courses", {
   courseId: integer("course_id").references(() => coursesTable.id).notNull(),
   razorpayOrderId: text("razorpay_order_id"),
   razorpayPaymentId: text("razorpay_payment_id"),
+  paymentMethod: text("payment_method").default("razorpay"), // 'razorpay' | 'google_play' | 'free'
+  playPurchaseToken: text("play_purchase_token"),
+  playOrderId: text("play_order_id"),
   purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
 });
 
@@ -146,6 +150,8 @@ export const paymentsTable = pgTable("payments", {
   razorpayPaymentId: text("razorpay_payment_id"),
   amount: integer("amount").notNull(), // paise, after coupon
   currency: text("currency").default("INR").notNull(),
+  paymentProvider: text("payment_provider").default("razorpay").notNull(), // 'razorpay' | 'google_play'
+  googleAlternativeBillingToken: text("google_alternative_billing_token"),
   couponId: integer("coupon_id").references(() => couponsTable.id, { onDelete: 'set null' }),
   status: text("status").default("created").notNull(), // 'created' | 'paid' | 'failed'
   failureReason: text("failure_reason"),

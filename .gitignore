@@ -60,3 +60,7 @@ firebase-service-account.json
 *.pem
 *.key
 .serverless/
+*.log
+build_logs.txt
+scratch/
+convert.ps1

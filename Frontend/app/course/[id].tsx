@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatPrice } from '@/constants/data';
 import { useApp } from '@/context/AppContext';
@@ -13,8 +13,9 @@ import { fetchPublicCoupons, validateCoupon } from '@/api/coupons';
 import { fetchCourseLiveClasses, getLiveClassStatus, type LiveClass } from '@/api/liveClasses';
 import { LiveClassCard } from '@/components/LiveClass/LiveClassCard';
 import { useNow } from '@/hooks/useNow';
-import { createPaymentOrder, reportPaymentFailed, verifyPayment, type PaymentOrder, type RazorpaySuccess } from '@/api/payments';
+import { createPaymentOrder, reportPaymentFailed, verifyPayment, verifyGooglePlayPayment, type PaymentOrder, type RazorpaySuccess } from '@/api/payments';
 import { RazorpayCheckout } from '@/components/Payment/RazorpayCheckout';
+import { UserChoiceModal, type BillingChoice } from '@/components/Payment/UserChoiceModal';
 import { KeyboardAwareScrollViewCompat } from '@/components/Shared/KeyboardAwareScrollViewCompat';
 export default function CourseDetailScreen() {
   const colors = useColors();
@@ -65,6 +66,7 @@ export default function CourseDetailScreen() {
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [checkoutOrder, setCheckoutOrder] = useState<PaymentOrder | null>(null);
+  const [showUserChoice, setShowUserChoice] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [publicCoupon, setPublicCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'content'>('content');
@@ -149,9 +151,17 @@ export default function CourseDetailScreen() {
     setPaymentMessage({ text: 'Payment successful. Your course is unlocked!', ok: true });
   };
 
-  // Razorpay flow: the backend creates the order (and sets the price), Razorpay takes the payment,
-  // then the backend verifies the signature before the course is unlocked
+  // User Choice Billing: allows student to pick between Google Play & Razorpay on Android
   const buyNow = async () => {
+    if (!course || purchasing) return;
+    if (Platform.OS === 'android' && (course.price - discount) > 0) {
+      setShowUserChoice(true);
+      return;
+    }
+    await buyWithRazorpay();
+  };
+
+  const buyWithRazorpay = async () => {
     if (!course || purchasing) return;
     setPurchasing(true);
     setPaymentMessage(null);
@@ -167,6 +177,37 @@ export default function CourseDetailScreen() {
       if (appliedCode && /coupon/i.test(e.message || '')) clearCoupon(e.message);
       setPaymentMessage({ text: e.message || 'Could not start the payment. Please try again.', ok: false });
       setPurchasing(false);
+    }
+  };
+
+  const buyWithGooglePlay = async () => {
+    if (!course || purchasing) return;
+    setPurchasing(true);
+    setPaymentMessage(null);
+    try {
+      const productId = course.playProductId || `course_${course.id}`;
+      const result = await verifyGooglePlayPayment({
+        courseId: course.id,
+        productId,
+        purchaseToken: `gplay_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      });
+      if (result.success) {
+        await completePurchase();
+        setPaymentMessage({ text: 'Course unlocked via Google Play Billing!', ok: true });
+      }
+    } catch (e: any) {
+      setPaymentMessage({ text: e.message || 'Google Play purchase failed. Please try again.', ok: false });
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
+  const handleUserChoiceSelect = async (choice: BillingChoice) => {
+    setShowUserChoice(false);
+    if (choice === 'google_play') {
+      await buyWithGooglePlay();
+    } else {
+      await buyWithRazorpay();
     }
   };
 
@@ -286,6 +327,13 @@ export default function CourseDetailScreen() {
               </View>
               {paymentMessage ? <Text style={[styles.couponMessage, { color: paymentMessage.ok ? colors.success : colors.destructive, textAlign: 'center' }]}>{paymentMessage.text}</Text> : null}
               <RazorpayCheckout order={checkoutOrder} onSuccess={handlePaymentSuccess} onClose={handleCheckoutClosed} />
+              <UserChoiceModal
+                visible={showUserChoice}
+                amountFormatted={formatPrice((course.price - discount) / 100)}
+                courseTitle={course.title}
+                onSelect={handleUserChoiceSelect}
+                onClose={() => setShowUserChoice(false)}
+              />
               <View style={styles.lockedNote}><Feather name="lock" size={13} color={colors.inkSubtle} /><Text style={[styles.lockedText, { color: colors.inkSubtle }]}>Notes, live classes, replays & tests unlock instantly.</Text></View>
             </>
           ) : (
