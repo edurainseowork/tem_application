@@ -8,7 +8,7 @@ import { hasPrivilegedClaims, isSuperAdminEmail, isSuperAdminToken } from '../li
 export const authRouter = Router();
 
 const isPrivilegedAccount = (user: UserRecord) => hasPrivilegedClaims(user.customClaims) || isSuperAdminEmail(user.email);
-const MSG91_AUTH_KEY = '575019AGrL1JB46ab9222dP1';
+const MSG91_AUTH_KEY = process.env.MSG91_AUTH_KEY || '';
 
 /**
  * GET /api/auth/me — Return authenticated user profile and resolved RBAC role

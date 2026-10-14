@@ -19,6 +19,7 @@ provider:
     BUNNY_STREAM_CDN_HOSTNAME: ${env:BUNNY_STREAM_CDN_HOSTNAME, ''}
     GOOGLE_PLAY_PACKAGE_NAME: ${env:GOOGLE_PLAY_PACKAGE_NAME, 'com.edurainindia.app'}
     GOOGLE_PLAY_SERVICE_ACCOUNT: ${env:GOOGLE_PLAY_SERVICE_ACCOUNT, ''}
+    MSG91_AUTH_KEY: ${env:MSG91_AUTH_KEY, ''}
   vpc:
     securityGroupIds:
       - sg-0c07d868d37903d36

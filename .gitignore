@@ -64,3 +64,5 @@ firebase-service-account.json
 build_logs.txt
 scratch/
 convert.ps1
+create-*.mjs
+test.js

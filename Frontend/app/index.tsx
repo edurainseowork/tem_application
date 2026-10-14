@@ -385,8 +385,8 @@ export default function LoginScreen() {
           visible={showWidget}
           onClose={() => setShowWidget(false)}
           onCompletion={handleVerificationComplete}
-          widgetId="366942657566373130303537"
-          tokenAuth="575019TcH2mXdWy6ab9fc92P1"
+          widgetId={process.env.EXPO_PUBLIC_MSG91_WIDGET_ID || "366942657566373130303537"}
+          tokenAuth={process.env.EXPO_PUBLIC_MSG91_TOKEN_AUTH || "575019TcH2mXdWy6ab9fc92P1"}
         />
       )}
         </View>
