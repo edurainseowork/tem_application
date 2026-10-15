@@ -2,7 +2,9 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { getAuth } from '../lib/firebaseAdmin.js';
 import type { UserRecord } from 'firebase-admin/auth';
-import { authenticateToken, extractUserRole } from '../middleware/auth';
+import { authenticateToken, extractUserRole, requireAdminOrFaculty } from '../middleware/auth';
+import { firebaseAuth } from '../lib/firebase-admin';
+import { rateLimit } from '../middlewares/security';
 import { hasPrivilegedClaims, isSuperAdminEmail, isSuperAdminToken } from '../lib/superAdmin';
 
 export const authRouter = Router();
@@ -32,6 +34,15 @@ authRouter.get('/me', authenticateToken, async (req: Request, res: Response): Pr
 });
 // Backend is fully stateless for AWS Lambda. 
 // We will send reqId to the frontend and expect it back during verification.
+/**
+ * POST /api/auth/cms-handoff — an admin or faculty member who signed in on the study website gets a
+ * Firebase custom token, so the CMS (a different site, with its own Firebase session) can sign them
+ * in without a second login. Only for accounts the backend already treats as admin or faculty.
+ */
+authRouter.post('/cms-handoff', rateLimit({ windowMs: 60_000, max: 10 }), requireAdminOrFaculty, async (req: Request, res: Response) => {
+  const token = await firebaseAuth.createCustomToken(req.auth!.uid);
+  res.json({ token });
+});
 
 authRouter.post('/verify-otp-and-signup', async (req: Request, res: Response): Promise<any> => {
   try {
