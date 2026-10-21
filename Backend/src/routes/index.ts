@@ -20,7 +20,12 @@ import bunnyRouter from "./bunny.routes.js";
 import cmsTestsRouter from "./cmsTests.js";
 import testsRouter from "./tests.js";
 import cmsAdminsRouter from "./cmsAdmins.js";
+import { mentorDeskRouter, teacherAssistantDeskRouter } from "./desks.js";
+import { restrictDeskRoles } from "../middleware/auth.js";
 const router = Router();
+
+// Mentor / Teacher Assistance accounts may only reach /auth/me and their own desk API
+router.use(restrictDeskRoles);
 
 router.use("/health", healthRouter);
 router.use("/courses", coursesRouter);
@@ -41,6 +46,9 @@ router.use("/cms/tests", cmsTestsRouter);
 router.use("/tests", testsRouter);
 // Super Admin only: create and remove CMS admins
 router.use("/cms/admins", cmsAdminsRouter);
+// Desk APIs, each limited to its own role
+router.use("/mentor-desk", mentorDeskRouter);
+router.use("/teacher-assistant-desk", teacherAssistantDeskRouter);
 // Mounted at the root: serves /courses/:courseId/live-classes and /live-classes/:id
 router.use(liveClassesRouter);
 router.use("/notifications", notificationsRouter);

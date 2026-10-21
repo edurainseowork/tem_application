@@ -2,12 +2,17 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { getAuth } from '../lib/firebaseAdmin.js';
 import type { UserRecord } from 'firebase-admin/auth';
-import { authenticateToken, extractUserRole } from '../middleware/auth';
+import { authenticateToken, extractUserRole, requireAdminOrFaculty } from '../middleware/auth';
+import { firebaseAuth } from '../lib/firebase-admin';
+import { rateLimit } from '../middlewares/security';
 import { hasPrivilegedClaims, isSuperAdminEmail, isSuperAdminToken } from '../lib/superAdmin';
+import { deskRoleFromClaims } from '../lib/deskRoles';
 
 export const authRouter = Router();
 
-const isPrivilegedAccount = (user: UserRecord) => hasPrivilegedClaims(user.customClaims) || isSuperAdminEmail(user.email);
+// Staff accounts (Super Admin, admins, faculty, mentors, teacher assistance) can't be taken over by app sign-up
+const isPrivilegedAccount = (user: UserRecord) =>
+  hasPrivilegedClaims(user.customClaims) || !!deskRoleFromClaims(user.customClaims) || isSuperAdminEmail(user.email);
 const MSG91_AUTH_KEY = process.env.MSG91_AUTH_KEY || '';
 
 /**
@@ -29,6 +34,22 @@ authRouter.get('/me', authenticateToken, async (req: Request, res: Response): Pr
             superAdminEmailUnverified: isSuperAdminEmail(req.auth?.email) && req.auth?.email_verified !== true,
     },
   });
+});
+
+/**
+ * POST /api/auth/cms-handoff — an admin, faculty member or mentor who signed in on the study website
+ * gets a short-lived Firebase custom token, so the CMS (a different site, with its own Firebase
+ * session) can sign them in without a second login. The role is read from the verified token and
+ * the database, never from the request. Mentors still only get the Mentor Desk in the CMS.
+ */
+const CMS_HANDOFF_ROLES = new Set(['admin', 'faculty', 'mentor']);
+authRouter.post('/cms-handoff', rateLimit({ windowMs: 60_000, max: 10 }), authenticateToken, async (req: Request, res: Response): Promise<any> => {
+  const role = extractUserRole(req);
+  if (!CMS_HANDOFF_ROLES.has(role)) {
+    return res.status(403).json({ error: 'This account has no CMS access' });
+  }
+  const token = await firebaseAuth.createCustomToken(req.auth!.uid);
+  res.json({ token });
 });
 // Backend is fully stateless for AWS Lambda. 
 // We will send reqId to the frontend and expect it back during verification.

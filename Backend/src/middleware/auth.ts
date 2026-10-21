@@ -7,6 +7,7 @@ import { users as usersTable, userCourses as userCoursesTable } from "../db/sche
 import { eq, and } from "drizzle-orm";
 import { parseId } from "../lib/http-error";
 import { hasPrivilegedClaims, isSuperAdminEmail, isSuperAdminToken } from "../lib/superAdmin";
+import { DESK_API_PREFIX, ROLE_LABELS, deskRoleFromClaims, isDeskRole, type DeskRole } from "../lib/deskRoles";
 export type DbUser = typeof usersTable.$inferSelect;
 
 declare global {
@@ -149,6 +150,15 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
       name: "Student User",
       role: "student",
     } as unknown as DecodedIdToken;
+  } else if (token === "test-mentor" || token === "test-teacher-assistant") {
+    const role = token === "test-mentor" ? "mentor" : "teacher_assistant";
+    return {
+      uid: `test-${role}-uid`,
+      email: `${role}@edurain.in`,
+      email_verified: true,
+      name: token === "test-mentor" ? "Mentor User" : "Teacher Assistant User",
+      role,
+    } as unknown as DecodedIdToken;
   } else if (token.startsWith("test-student-")) {
     const studentId = token.replace("test-student-", "");
     return {
@@ -161,9 +171,10 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
 
   try {
     const decoded = await firebaseAuth.verifyIdToken(token, checkRevoked);
-    // Tokens that carry CMS privileges are always checked for revocation, so a deleted or
-    // demoted admin cannot keep using a token issued before the change (valid for up to 1 hour).
-    if (!checkRevoked && (hasPrivilegedClaims(decoded) || isSuperAdminEmail(decoded.email))) {
+    // Tokens that carry CMS or desk (mentor / teacher assistance) privileges are always checked for
+    // revocation, so a removed account cannot keep using a token issued before the change
+    // (valid for up to 1 hour).
+    if (!checkRevoked && (hasPrivilegedClaims(decoded) || isSuperAdminEmail(decoded.email) || deskRoleFromClaims(decoded))) {
       await firebaseAuth.verifyIdToken(token, true);
     }
     return decoded;
@@ -181,13 +192,13 @@ export async function verifyToken(req: Request, checkRevoked = false): Promise<D
  * 3. Fallback: 'student'
  */
 export function extractUserRole(req: Request): "admin" | "faculty" | "student" | string {
-  // 1. Check database user record if loaded
-    // 0. The verified Super Admin is always an admin
-    if (isSuperAdminToken(req.auth)) return "admin";
+  // 0. The verified Super Admin is always an admin
+  if (isSuperAdminToken(req.auth)) return "admin";
 
+  // 1. Check database user record if loaded
   if (req.user?.role) {
     const dbRole = req.user.role.trim().toLowerCase();
-    if (dbRole === "admin" || dbRole === "faculty" || dbRole === "student") {
+    if (dbRole === "admin" || dbRole === "faculty" || dbRole === "student" || isDeskRole(dbRole)) {
       return dbRole;
     }
   }
@@ -503,4 +514,62 @@ export async function requireSuperAdmin(req: Request, res: Response, next: NextF
     return;
   }
   next();
+}
+
+/**
+ * Desk roles (Mentor, Teacher Assistance) may only use GET /api/auth/me and their own desk API.
+ * Mounted once at the top of the /api router, so every other route (student, CMS, admin)
+ * rejects them with 403, whatever the route's own middleware is. The role comes from the
+ * Firebase custom claim set by the backend when the Super Admin invited them; nothing the
+ * client sends can change it.
+ */
+export async function restrictDeskRoles(req: Request, res: Response, next: NextFunction) {
+  if (!readBearerToken(req)) return next();
+  const decoded = await verifyToken(req, false);
+  const deskRole = decoded ? deskRoleFromClaims(decoded) : null;
+  if (!deskRole) return next(); // not a desk account (or an invalid token: the route answers 401)
+
+  const path = req.path.replace(/\/+$/, "") || "/";
+  const prefix = DESK_API_PREFIX[deskRole];
+  const allowed =
+    (path === "/auth/me" && req.method === "GET") ||
+    // Mentors work in the CMS Mentor Desk: they may get the one-time sign-in handover to it
+    (deskRole === "mentor" && path === "/auth/cms-handoff" && req.method === "POST") ||
+    path === "/health" ||
+    path === prefix ||
+    path.startsWith(`${prefix}/`);
+  if (allowed) return next();
+
+  logger.warn({ uid: decoded?.uid, role: deskRole, path: req.originalUrl, method: req.method }, "Desk role blocked from API");
+  res.status(403).json({ error: `${ROLE_LABELS[deskRole]} accounts can only use the ${ROLE_LABELS[deskRole]} desk` });
+}
+
+/**
+ * Only the given desk role. Verifies the token (rejecting revoked tokens), loads the user and
+ * checks the role from the database / backend-set claims.
+ */
+export function requireDeskRole(role: DeskRole) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!readBearerToken(req)) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const decoded = await verifyToken(req, true);
+    if (!decoded) {
+      res.status(401).json({ error: "Invalid or expired authentication token" });
+      return;
+    }
+    req.auth = decoded;
+    req.firebaseUid = decoded.uid;
+    const dbUser = await syncOrLookupUser(decoded);
+    if (dbUser) req.user = dbUser;
+
+    const actual = extractUserRole(req);
+    if (actual !== role || deskRoleFromClaims(decoded) !== role) {
+      logger.warn({ uid: decoded.uid, role: actual, need: role, path: req.originalUrl }, "Wrong role for desk route");
+      res.status(403).json({ error: `Only ${ROLE_LABELS[role]} accounts can use this page` });
+      return;
+    }
+    next();
+  };
 }
